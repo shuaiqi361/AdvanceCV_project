@@ -27,11 +27,11 @@ import torch.nn.functional as F
 class FocalLoss(nn.Module):
     'Focal Loss - https://arxiv.org/abs/1708.02002'
 
-    def __init__(self, alpha=0.25, gamma=2, size_average=True):
+    def __init__(self, alpha=0.25, gamma=2, reduction='mean'):
         super().__init__()
         self.alpha = alpha
         self.gamma = gamma
-        self.average = size_average
+        self.reduction = reduction
 
     def forward(self, pred_logits, target):
         pred = pred_logits.sigmoid()
@@ -39,25 +39,29 @@ class FocalLoss(nn.Module):
         alpha = target * self.alpha + (1. - target) * (1. - self.alpha)
         pt = torch.where(target == 1,  pred, 1 - pred)
         focal_loss = alpha * (1. - pt) ** self.gamma * ce
-        if self.average:
+        if self.reduction == 'mean':
             return focal_loss.mean()
+        elif self.reduction == 'sum':
+            return focal_loss.sum()
         else:
             return focal_loss
 
 class SmoothL1Loss(nn.Module):
     'Smooth L1 Loss'
 
-    def __init__(self, beta=0.11, size_average=True):
+    def __init__(self, beta=0.11, reduction='mean'):
         super().__init__()
         self.beta = beta
-        self.average = size_average
+        self.reduction = reduction
 
     def forward(self, pred, target):
         x = (pred - target).abs()
         l1 = x - 0.5 * self.beta
         l2 = 0.5 * x ** 2 / self.beta
         l1_loss = torch.where(x >= self.beta, l1, l2)
-        if self.average:
+        if self.reduction == 'mean':
             return l1_loss.mean()
+        elif self.reduction == 'sum':
+            return l1_loss.sum()
         else:
             return l1_loss

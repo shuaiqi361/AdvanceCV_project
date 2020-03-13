@@ -3,3 +3,4 @@ log/*
 checkpoints/*
 *.tar
 .idea/*
+__pycache__/*
