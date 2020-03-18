@@ -144,10 +144,10 @@ class AuxiliaryConvolutions(nn.Module):
         self.conv9_2 = DeformConv2d(128, 256, kernel_size=3, stride=2, padding=1)  # dim. reduction because stride > 1
 
         self.conv10_1 = nn.Conv2d(256, 128, kernel_size=1, padding=0)
-        self.conv10_2 = DeformConv2d(128, 256, kernel_size=3, padding=0)  # dim. reduction because padding = 0
+        self.conv10_2 = nn.Conv2d(128, 256, kernel_size=3, padding=0)  # dim. reduction because padding = 0
 
         self.conv11_1 = nn.Conv2d(256, 128, kernel_size=1, padding=0)
-        self.conv11_2 = DeformConv2d(128, 256, kernel_size=3, padding=0)  # dim. reduction because padding = 0
+        self.conv11_2 = nn.Conv2d(128, 256, kernel_size=3, padding=0)  # dim. reduction because padding = 0
 
         # Initialize convolutions' parameters
         self.init_conv2d()
@@ -594,6 +594,8 @@ class MultiBoxLoss(nn.Module):
         self.cross_entropy = nn.CrossEntropyLoss(reduce=False)
 
     def increase_threshold(self, increment=0.1):
+        if self.threshold >= 0.7:
+            return
         self.threshold += increment
 
     def forward(self, predicted_locs, predicted_scores, boxes, labels):
@@ -610,6 +612,7 @@ class MultiBoxLoss(nn.Module):
         n_priors = self.priors_cxcy.size(0)
         n_classes = predicted_scores.size(2)
 
+        # print('Should be equal: ', n_priors, predicted_locs.size(1), predicted_scores.size(1))
         assert n_priors == predicted_locs.size(1) == predicted_scores.size(1)
 
         true_locs = torch.zeros((batch_size, n_priors, 4), dtype=torch.float).to(device)  # (N, 8732, 4)
