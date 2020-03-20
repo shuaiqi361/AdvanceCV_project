@@ -684,7 +684,7 @@ def save_checkpoint(epoch, model, optimizer, name=None):
              'model': model,
              'optimizer': optimizer}
     if name is None:
-        filename = 'my_checkpoint_ssd300.pth.tar'
+        filename = 'checkpoints/my_checkpoint_ssd300.pth.tar'
     else:
         filename = name
     torch.save(state, filename)

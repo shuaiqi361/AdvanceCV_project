@@ -13,8 +13,8 @@ import numpy as np
 pp = PrettyPrinter()
 
 # Data parameters
-data_folder = './'  # folder with data files
-f_log = open(os.path.join(data_folder, 'train_log.txt'), 'w')
+data_folder = 'data/'  # folder with data files
+f_log = open('log/train_SSD_log.txt', 'w')
 keep_difficult = True  # use objects considered difficult to detect?
 
 # Model parameters
@@ -24,12 +24,12 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Learning parameters
 checkpoint = None  # path to model checkpoint, None if none
-batch_size = 32  # batch size
-iterations = 120000  # number of iterations to train
+batch_size = 4  # batch size
+iterations = 300000  # number of iterations to train
 workers = 4  # number of workers for loading data in the DataLoader
 print_freq = 500  # print training status every __ batches
 lr = 1e-3  # learning rate
-decay_lr_at = [80000, 100000]  # decay learning rate after these many iterations
+decay_lr_at = [200000, 250000]  # decay learning rate after these many iterations
 decay_lr_to = 0.1  # decay learning rate to this fraction of the existing learning rate
 momentum = 0.9  # momentum
 weight_decay = 5e-4  # weight decay
@@ -89,9 +89,9 @@ def main():
     # Calculate total number of epochs to train and the epochs to decay learning rate at (i.e. convert iterations to epochs)
     # To convert iterations to epochs, divide iterations by the number of iterations per epoch
     # The paper trains for 120,000 iterations with a batch size of 32, decays after 80,000 and 100,000 iterations
-    epochs = iterations // (len(train_dataset) // 32)
-    # print('Length of dataset:', len(train_dataset), epochs)
-    decay_lr_at = [it // (len(train_dataset) // 32) for it in decay_lr_at]
+    epochs = iterations // (len(train_dataset) // batch_size)
+    print('Length of dataset:', len(train_dataset), epochs)
+    decay_lr_at = [it // (len(train_dataset) // batch_size) for it in decay_lr_at]
 
     # Epochs
     best_mAP = -1.
@@ -110,12 +110,12 @@ def main():
               epoch=epoch)
 
         # Save checkpoint
-        if epoch >= 120 and epoch % 30:
+        if epoch >= 50 and epoch % 10:
             _, current_mAP = evaluate(test_loader, model)
             if current_mAP > best_mAP:
                 save_checkpoint(epoch, model, optimizer)
                 best_mAP = current_mAP
-            # criterion.increase_threshold(0.05)
+                criterion.increase_threshold(0.05)
 
     _, current_mAP = evaluate(test_loader, model)
     if current_mAP > best_mAP:
