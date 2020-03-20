@@ -2,7 +2,7 @@ import time
 import torch.backends.cudnn as cudnn
 import torch.optim
 import torch.utils.data
-from Focal_model import SSD300, MultiFocalLoss
+from model import SSD300, MultiBoxLoss
 from datasets import PascalVOCDataset
 from utils import *
 from tqdm import tqdm
@@ -13,8 +13,8 @@ import numpy as np
 pp = PrettyPrinter()
 
 # Data parameters
-data_folder = 'data/'  # folder with data files
-f_log = open('log/train_focal_log.txt', 'w')
+data_folder = './'  # folder with data files
+f_log = open(os.path.join(data_folder, 'train_log.txt'), 'w')
 keep_difficult = True  # use objects considered difficult to detect?
 
 # Model parameters
@@ -25,6 +25,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Learning parameters
 checkpoint = None  # path to model checkpoint, None if none
 batch_size = 32  # batch size
+max_batchsize_periter = 4
 iterations = 120000  # number of iterations to train
 workers = 4  # number of workers for loading data in the DataLoader
 print_freq = 500  # print training status every __ batches
@@ -69,7 +70,7 @@ def main():
 
     # Move to default device
     model = model.to(device)
-    criterion = MultiFocalLoss(priors_cxcy=model.priors_cxcy).to(device)
+    criterion = MultiBoxLoss(priors_cxcy=model.priors_cxcy).to(device)
 
     # Custom dataloaders
     train_dataset = PascalVOCDataset(data_folder,
@@ -97,6 +98,7 @@ def main():
     best_mAP = -1.
     # criterion.increase_threshold()
     # print('current threshold: ', criterion.threshold)
+
     for epoch in range(start_epoch, epochs):
 
         # Decay learning rate at particular epochs
@@ -110,12 +112,12 @@ def main():
               epoch=epoch)
 
         # Save checkpoint
-        if epoch >= 120 and epoch % 30 == 0:
+        if epoch >= 100 and epoch % 30:
             _, current_mAP = evaluate(test_loader, model)
             if current_mAP > best_mAP:
-                save_checkpoint(epoch, model, optimizer, 'checkpoints/my_focal_checkpoint.pth.tar')
+                save_checkpoint(epoch, model, optimizer)
                 best_mAP = current_mAP
-            criterion.increase_threshold(0.05)
+            # criterion.increase_threshold(0.05)
 
     _, current_mAP = evaluate(test_loader, model)
     if current_mAP > best_mAP:
@@ -142,6 +144,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
     start = time.time()
 
     # Batches
+    flag = batch_size / max_batchsize_periter
     for i, (images, boxes, labels, _) in enumerate(train_loader):
         data_time.update(time.time() - start)
 
@@ -157,15 +160,19 @@ def train(train_loader, model, criterion, optimizer, epoch):
         loss = criterion(predicted_locs, predicted_scores, boxes, labels)  # scalar
 
         # Backward prop.
-        optimizer.zero_grad()
-        loss.backward()
+        if i % flag == 0 and i != 0:
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+        else:
+            loss.backward()
 
         # Clip gradients, if necessary
-        if grad_clip is not None:
-            clip_gradient(optimizer, grad_clip)
+        # if grad_clip is not None:
+        #     clip_gradient(optimizer, grad_clip)
 
         # Update model
-        optimizer.step()
+
 
         losses.update(loss.item(), images.size(0))
         batch_time.update(time.time() - start)
@@ -224,7 +231,7 @@ def evaluate(test_loader, model):
 
             # Detect objects in SSD output
             det_boxes_batch, det_labels_batch, det_scores_batch = model.detect_objects(predicted_locs, predicted_scores,
-                                                                                       min_score=0.01, max_overlap=0.5,
+                                                                                       min_score=0.02, max_overlap=0.45,
                                                                                        top_k=100)
             time_end = time.time()
             # Evaluation MUST be at min_score=0.01, max_overlap=0.45, top_k=200 for fair comparision with the paper's results and other repos
