@@ -246,15 +246,15 @@ class PredictionConvolutions(nn.Module):
         # final offsets to refine the initial reppoints
         self.loc_conv4_3_out = DeformConv2d(n_boxes['conv4_3'] * self.n_points * 4,
                                             n_boxes['conv4_3'] * self.n_points * 2, kernel_size=1, padding=0)
-        self.loc_conv7_out = DeformConv2d(n_boxes['conv4_3'] * self.n_points * 4, n_boxes['conv7'] * self.n_points * 2,
+        self.loc_conv7_out = DeformConv2d(n_boxes['conv7'] * self.n_points * 4, n_boxes['conv7'] * self.n_points * 2,
                                           kernel_size=1, padding=0)
-        self.loc_conv8_2_out = DeformConv2d(n_boxes['conv4_3'] * self.n_points * 4,
+        self.loc_conv8_2_out = DeformConv2d(n_boxes['conv8_2'] * self.n_points * 4,
                                             n_boxes['conv8_2'] * self.n_points * 2, kernel_size=1, padding=0)
-        self.loc_conv9_2_out = DeformConv2d(n_boxes['conv4_3'] * self.n_points * 4,
+        self.loc_conv9_2_out = DeformConv2d(n_boxes['conv9_2'] * self.n_points * 4,
                                             n_boxes['conv9_2'] * self.n_points * 2, kernel_size=1, padding=0)
-        self.loc_conv10_2_out = nn.Conv2d(n_boxes['conv4_3'] * self.n_points * 4,
+        self.loc_conv10_2_out = nn.Conv2d(n_boxes['conv10_2'] * self.n_points * 4,
                                           n_boxes['conv10_2'] * self.n_points * 2, kernel_size=1, padding=0)
-        self.loc_conv11_2_out = nn.Conv2d(n_boxes['conv4_3'] * self.n_points * 4,
+        self.loc_conv11_2_out = nn.Conv2d(n_boxes['conv11_2'] * self.n_points * 4,
                                           n_boxes['conv11_2'] * self.n_points * 2, kernel_size=1, padding=0)
 
         # Class prediction convolutions (predict classes in localization boxes)
@@ -267,15 +267,15 @@ class PredictionConvolutions(nn.Module):
 
         self.cl_conv4_3_out = DeformConv2d(n_boxes['conv4_3'] * self.n_points * 2 + n_boxes['conv4_3'] * n_classes,
                                            n_boxes['conv4_3'] * n_classes, kernel_size=1, padding=0)
-        self.cl_conv7_out = DeformConv2d(n_boxes['conv4_3'] * self.n_points * 2 + n_boxes['conv4_3'] * n_classes,
+        self.cl_conv7_out = DeformConv2d(n_boxes['conv7'] * self.n_points * 2 + n_boxes['conv7'] * n_classes,
                                          n_boxes['conv7'] * n_classes, kernel_size=1, padding=0)
-        self.cl_conv8_2_out = DeformConv2d(n_boxes['conv4_3'] * self.n_points * 2 + n_boxes['conv4_3'] * n_classes,
+        self.cl_conv8_2_out = DeformConv2d(n_boxes['conv8_2'] * self.n_points * 2 + n_boxes['conv8_2'] * n_classes,
                                            n_boxes['conv8_2'] * n_classes, kernel_size=1, padding=0)
-        self.cl_conv9_2_out = DeformConv2d(n_boxes['conv4_3'] * self.n_points * 2 + n_boxes['conv4_3'] * n_classes,
+        self.cl_conv9_2_out = DeformConv2d(n_boxes['conv9_2'] * self.n_points * 2 + n_boxes['conv9_2'] * n_classes,
                                            n_boxes['conv9_2'] * n_classes, kernel_size=1, padding=0)
-        self.cl_conv10_2_out = nn.Conv2d(n_boxes['conv4_3'] * self.n_points * 2 + n_boxes['conv4_3'] * n_classes,
+        self.cl_conv10_2_out = nn.Conv2d(n_boxes['conv10_2'] * self.n_points * 2 + n_boxes['conv10_2'] * n_classes,
                                          n_boxes['conv10_2'] * n_classes, kernel_size=1, padding=0)
-        self.cl_conv11_2_out = nn.Conv2d(n_boxes['conv4_3'] * self.n_points * 2 + n_boxes['conv4_3'] * n_classes,
+        self.cl_conv11_2_out = nn.Conv2d(n_boxes['conv11_2'] * self.n_points * 2 + n_boxes['conv11_2'] * n_classes,
                                          n_boxes['conv11_2'] * n_classes, kernel_size=1, padding=0)
 
         # Initialize convolutions' parameters
@@ -373,36 +373,45 @@ class PredictionConvolutions(nn.Module):
         # Predict classes in localization boxes
         c_conv4_3 = self.cl_conv4_3(conv4_3_feats)  # (N, 3 * n_classes, 38, 38)
         c_conv4_3_out = self.cl_conv4_3_out(torch.cat([F.relu(c_conv4_3), F.relu(l_conv4_3_init)], dim=1))
-        c_conv4_3_out = c_conv4_3_out.permute(0, 2, 3,
-                                              1).contiguous()  # (N, 38, 38, 3 * n_classes), to match prior-box order (after .view())
-        c_conv4_3_out = c_conv4_3_out.view(batch_size, -1,
-                                           self.n_classes)  # (N, 4332, n_classes), there are a total 4332 boxes on this feature map
+        c_conv4_3_out = c_conv4_3_out.permute(0, 2, 3, 1).contiguous()  # (N, 38, 38, 3 * n_classes), to match prior-box order (after .view())
+        c_conv4_3_out = c_conv4_3_out.view(batch_size, -1, self.n_classes)
+        c_conv4_3 = c_conv4_3.permute(0, 2, 3, 1).contiguous()
+        c_conv4_3 = c_conv4_3.view(batch_size, -1, self.n_classes)
 
         c_conv7 = self.cl_conv7(conv7_feats)  # (N, 3 * n_classes, 19, 19)
         c_conv7_out = self.cl_conv7_out(torch.cat([F.relu(c_conv7), F.relu(l_conv7_init)], dim=1))
         c_conv7_out = c_conv7_out.permute(0, 2, 3, 1).contiguous()  # (N, 19, 19, 3 * n_classes)
-        c_conv7_out = c_conv7_out.view(batch_size, -1,
-                                       self.n_classes)  # (N, 1083, n_classes), there are a total 1083 boxes on this feature map
+        c_conv7_out = c_conv7_out.view(batch_size, -1, self.n_classes)
+        c_conv7 = c_conv7.permute(0, 2, 3, 1).contiguous()
+        c_conv7 = c_conv7.view(batch_size, -1, self.n_classes)
 
         c_conv8_2 = self.cl_conv8_2(conv8_2_feats)  # (N, 2 * n_classes, 10, 10)
         c_conv8_2_out = self.cl_conv8_2_out(torch.cat([F.relu(c_conv8_2), F.relu(l_conv8_2_init)], dim=1))
         c_conv8_2_out = c_conv8_2_out.permute(0, 2, 3, 1).contiguous()  # (N, 10, 10, 2 * n_classes)
         c_conv8_2_out = c_conv8_2_out.view(batch_size, -1, self.n_classes)  # (N, 200, n_classes)
+        c_conv8_2 = c_conv8_2.permute(0, 2, 3, 1).contiguous()
+        c_conv8_2 = c_conv8_2.view(batch_size, -1, self.n_classes)
 
         c_conv9_2 = self.cl_conv9_2(conv9_2_feats)  # (N, 2 * n_classes, 5, 5)
         c_conv9_2_out = self.cl_conv9_2_out(torch.cat([F.relu(c_conv9_2), F.relu(l_conv9_2_init)], dim=1))
         c_conv9_2_out = c_conv9_2_out.permute(0, 2, 3, 1).contiguous()  # (N, 5, 5, 2 * n_classes)
         c_conv9_2_out = c_conv9_2_out.view(batch_size, -1, self.n_classes)  # (N, 50, n_classes)
+        c_conv9_2 = c_conv9_2.permute(0, 2, 3, 1).contiguous()
+        c_conv9_2 = c_conv9_2.view(batch_size, -1, self.n_classes)
 
         c_conv10_2 = self.cl_conv10_2(conv10_2_feats)  # (N, 2 * n_classes, 3, 3)
         c_conv10_2_out = self.cl_conv10_2_out(torch.cat([F.relu(c_conv10_2), F.relu(l_conv10_2_init)], dim=1))
         c_conv10_2_out = c_conv10_2_out.permute(0, 2, 3, 1).contiguous()  # (N, 3, 3, 2 * n_classes)
         c_conv10_2_out = c_conv10_2_out.view(batch_size, -1, self.n_classes)  # (N, 18, n_classes)
+        c_conv10_2 = c_conv10_2.permute(0, 2, 3, 1).contiguous()
+        c_conv10_2 = c_conv10_2.view(batch_size, -1, self.n_classes)
 
         c_conv11_2 = self.cl_conv11_2(conv11_2_feats)  # (N, 2 * n_classes, 1, 1)
         c_conv11_2_out = self.cl_conv11_2_out(torch.cat([F.relu(c_conv11_2), F.relu(l_conv11_2_init)], dim=1))
         c_conv11_2_out = c_conv11_2_out.permute(0, 2, 3, 1).contiguous()  # (N, 1, 1, 2 * n_classes)
         c_conv11_2_out = c_conv11_2_out.view(batch_size, -1, self.n_classes)  # (N, 2, n_classes)
+        c_conv11_2 = c_conv11_2.permute(0, 2, 3, 1).contiguous()
+        c_conv11_2 = c_conv11_2.view(batch_size, -1, self.n_classes)
 
         # A total of 4332 + 1083 + 200 + 50 + 18 + 2 = 5685 boxes
         # Concatenate in this specific order (i.e. must match the order of the prior-boxes)
@@ -410,10 +419,12 @@ class PredictionConvolutions(nn.Module):
                                l_conv9_2_init_out, l_conv10_2_init_out, l_conv11_2_init_out], dim=1)  # (N, 5685, 18)
         locs_refine = torch.cat([l_conv4_3_out, l_conv7_out, l_conv8_2_out, l_conv9_2_out,
                                  l_conv10_2_out, l_conv11_2_out], dim=1)  # (N, 5685, 18)
+        classes_init = torch.cat([c_conv4_3, c_conv7, c_conv8_2, c_conv9_2,
+                                  c_conv10_2, c_conv11_2], dim=1)  # (N, 5685, n_classes)
         classes_scores = torch.cat([c_conv4_3_out, c_conv7_out, c_conv8_2_out, c_conv9_2_out,
                                     c_conv10_2_out, c_conv11_2_out], dim=1)  # (N, 5685, n_classes)
 
-        return locs_init, locs_refine, classes_scores
+        return locs_init, locs_refine, classes_init, classes_scores
 
 
 class SSD300RepPoint(nn.Module):
@@ -448,7 +459,9 @@ class SSD300RepPoint(nn.Module):
 
         # Prior boxes
         self.rep_points_xy = self.create_rep_points()
-        self.priors_xy = self.rep2bbox(self.rep_points_xy)
+        # print(self.rep_points_xy.size())
+
+        # self.priors_xy = self.rep2bbox(self.rep_points_xy)
 
     def forward(self, image):
         """
@@ -470,10 +483,13 @@ class SSD300RepPoint(nn.Module):
             self.aux_convs(conv7_feats)  # (N, 512, 10, 10),  (N, 256, 5, 5), (N, 256, 3, 3), (N, 256, 1, 1)
 
         # Run prediction convolutions (predict offsets w.r.t prior-boxes and classes in each resulting localization box)
-        locs, classes_scores = self.pred_convs(conv4_3_feats, conv7_feats, conv8_2_feats, conv9_2_feats, conv10_2_feats,
-                                               conv11_2_feats)  # (N, 5685, 4), (N, 5685, n_classes)
+        locs_init, locs_refine, classes_init, classes_scores = self.pred_convs(conv4_3_feats, conv7_feats, conv8_2_feats,
+                                                                 conv9_2_feats, conv10_2_feats,
+                                                                 conv11_2_feats)  # (N, 5685, 4), (N, 5685, n_classes)
 
-        return locs, classes_scores
+        # print('479:', (locs_init + self.rep_points_xy + locs_refine).size())
+        return self.rep2bbox(locs_init + self.rep_points_xy), \
+               self.rep2bbox(locs_init + self.rep_points_xy + locs_refine), classes_init, classes_scores
 
     def create_rep_points(self):
         """
@@ -554,7 +570,39 @@ class SSD300RepPoint(nn.Module):
         e.g. [x1,y1,x2,y1, ..., x9,y9]
         :return: corresponding bounding boxes [x1,y1,x2,y2]
         """
-        points_reshape = predicted_locs.view(predicted_locs.size[0], -1, 2, self.n_points)
+        if len(predicted_locs.size()) == 2:
+            points_reshape = predicted_locs.view(-1, 2, self.n_points)
+            pts_x = points_reshape[:, 0, :]
+            pts_y = points_reshape[:, 1, :]
+
+            if self.transform_method == 'min-max':
+                bbox_left = pts_x.min(dim=1, keepdim=True)
+                bbox_right = pts_x.max(dim=1, keepdim=True)
+                bbox_top = pts_y.min(dim=1, keepdim=True)
+                bbox_bottom = pts_y.max(dim=1, keep=True)
+                bbox = torch.cat([bbox_left, bbox_top, bbox_right, bbox_bottom], dim=1)
+            elif self.transform_method == 'moment':
+                pts_x_mean = pts_x.mean(dim=1, keepdim=True)
+                pts_y_mean = pts_x.mean(dim=1, keepdim=True)
+                pts_x_std = torch.std(pts_x - pts_x_mean, dim=1, keepdim=True)
+                pts_y_std = torch.std(pts_y - pts_y_mean, dim=1, keepdim=True)
+                moment_transfer = self.moment_multipler * self.moment_transfer + \
+                                  (1 - self.moment_multipler) * self.moment_transfer.detach()
+                moment_width = moment_transfer[0]
+                moment_height = moment_transfer[1]
+                half_width = pts_x_std * torch.exp(moment_width)
+                half_height = pts_y_std * torch.exp(moment_height)
+                bbox = torch.cat([pts_x_mean - half_width, pts_y_mean - half_height,
+                                  pts_x_mean + half_width, pts_y_mean + half_height], dim=1)
+
+            else:
+                raise NotImplementedError
+
+            return bbox.clamp_(0, 1)
+
+        # else size ([batchsize, 5685, 18])
+        # print(predicted_locs.size(), len(predicted_locs.size()))
+        points_reshape = predicted_locs.view(predicted_locs.size(0), -1, 2, self.n_points)
         pts_x = points_reshape[:, :, 0, :]
         pts_y = points_reshape[:, :, 1, :]
 
@@ -583,7 +631,6 @@ class SSD300RepPoint(nn.Module):
 
         return bbox.clamp_(0, 1)
 
-
     def detect_objects(self, predicted_locs, predicted_scores, min_score, max_overlap, top_k):
         """
         Decipher the 5685 locations and class scores (output of ths SSD300) to detect objects.
@@ -602,7 +649,7 @@ class SSD300RepPoint(nn.Module):
         n_priors = self.rep_points_xy.size(0)
         # print(n_priors, predicted_locs.size(), predicted_scores.size())
         predicted_scores = F.softmax(predicted_scores, dim=2)  # (N, 5685, n_classes)
-        decoded_locs = self.rep2bbox(predicted_locs)  # convert reppoints to bounding boxes
+        decoded_locs = predicted_locs  # convert reppoints to bounding boxes
 
         # Lists to store final predicted boxes, labels, and scores for all images
         all_images_boxes = list()
@@ -630,7 +677,6 @@ class SSD300RepPoint(nn.Module):
 
                 class_scores = class_scores[torch.nonzero(score_above_min_score)].squeeze(
                     dim=1)  # (n_qualified), n_min_score <= 5685
-
 
                 class_decoded_locs = decoded_locs[torch.nonzero(score_above_min_score)].squeeze(
                     dim=1)  # (n_qualified, 4)
@@ -704,9 +750,9 @@ class RepPointLoss(nn.Module):
     (2) a confidence loss for the predicted class scores.
     """
 
-    def __init__(self, priors_xy, threshold=0.5, neg_pos_ratio=3, alpha=1.):
+    def __init__(self, threshold=0.5, neg_pos_ratio=3, alpha=1.):
         super(RepPointLoss, self).__init__()
-        self.priors_xy = priors_xy
+        # self.priors_xy = priors_xy
         self.threshold = threshold
         self.neg_pos_ratio = neg_pos_ratio
         self.alpha = alpha
@@ -720,43 +766,7 @@ class RepPointLoss(nn.Module):
 
         self.threshold += increment
 
-    def rep2bbox(self, predicted_locs):
-        """
-        Converting the reppoint sets into bounding boxes
-        :param predicted_locs: the input point sets, shape: [batchsize, 5685, 18], the element in each set is a list of 18 elements
-        e.g. [x1,y1,x2,y1, ..., x9,y9]
-        :return: corresponding bounding boxes [x1,y1,x2,y2]
-        """
-        points_reshape = predicted_locs.view(predicted_locs.size[0], -1, 2, self.n_points)
-        pts_x = points_reshape[:, :, 0, :]
-        pts_y = points_reshape[:, :, 1, :]
-
-        if self.transform_method == 'min-max':
-            bbox_left = pts_x.min(dim=2, keepdim=True)
-            bbox_right = pts_x.max(dim=2, keepdim=True)
-            bbox_top = pts_y.min(dim=2, keepdim=True)
-            bbox_bottom = pts_y.max(dim=2, keep=True)
-            bbox = torch.cat([bbox_left, bbox_top, bbox_right, bbox_bottom], dim=2)
-        elif self.transform_method == 'moment':
-            pts_x_mean = pts_x.mean(dim=2, keepdim=True)
-            pts_y_mean = pts_x.mean(dim=2, keepdim=True)
-            pts_x_std = torch.std(pts_x - pts_x_mean, dim=2, keepdim=True)
-            pts_y_std = torch.std(pts_y - pts_y_mean, dim=2, keepdim=True)
-            moment_transfer = self.moment_multipler * self.moment_transfer + \
-                              (1 - self.moment_multipler) * self.moment_transfer.detach()
-            moment_width = moment_transfer[0]
-            moment_height = moment_transfer[1]
-            half_width = pts_x_std * torch.exp(moment_width)
-            half_height = pts_y_std * torch.exp(moment_height)
-            bbox = torch.cat([pts_x_mean - half_width, pts_y_mean - half_height,
-                              pts_x_mean + half_width, pts_y_mean + half_height], dim=2)
-
-        else:
-            raise NotImplementedError
-
-        return bbox.clamp_(0, 1)
-
-    def forward(self, predicted_locs, predicted_scores, boxes, labels):
+    def forward(self, predicted_locs_init, predicted_locs_refine, predicted_init, predicted_scores, boxes, labels):
         """
         Forward propagation.
 
@@ -766,26 +776,33 @@ class RepPointLoss(nn.Module):
         :param labels: true object labels, a list of N tensors
         :return: multibox loss, a scalar
         """
-        batch_size = predicted_locs.size(0)
-        n_priors = self.priors_cxcy.size(0)
+
+        # predicted_locs = torch.cat([predicted_locs_init, predicted_locs_refine], dim=1)
+
+        batch_size = predicted_locs_init.size(0)
+        n_priors = predicted_locs_init.size(1)
         n_classes = predicted_scores.size(2)
 
-        assert n_priors == predicted_locs.size(1) == predicted_scores.size(1)
+        assert predicted_locs_init.size(1) == predicted_locs_refine.size(1) == predicted_scores.size(1)
 
-        true_locs = torch.zeros((batch_size, n_priors, 4), dtype=torch.float).to(device)  # (N, 5685, 4)
+        true_locs_init = torch.zeros((batch_size, n_priors, 4), dtype=torch.float).to(device)  # (N, 5685, 4)
+        true_locs_refine = torch.zeros((batch_size, n_priors, 4), dtype=torch.float).to(device)  # (N, 5685, 4)
+        true_classes_init = torch.zeros((batch_size, n_priors), dtype=torch.long).to(device)  # (N, 5685)
         true_classes = torch.zeros((batch_size, n_priors), dtype=torch.long).to(device)  # (N, 5685)
 
-        predicted_bbox = self.rep2bbox(predicted_locs)
+        predicted_bbox_init = predicted_locs_init
+        predicted_bbox_refine = predicted_locs_refine
 
         # For each image
         for i in range(batch_size):
             n_objects = boxes[i].size(0)
 
-            overlap = find_jaccard_overlap(boxes[i],
-                                           self.priors_xy)  # (n_objects, 5685)
+            overlap_init = find_jaccard_overlap(boxes[i], predicted_bbox_init[i])  # (n_objects, 5685)
+            overlap_refine = find_jaccard_overlap(boxes[i], predicted_bbox_refine[i])  # (n_objects, 5685)
 
             # For each prior, find the object that has the maximum overlap, return [value, indices]
-            overlap_for_each_prior, object_for_each_prior = overlap.max(dim=0)  # (5685)
+            overlap_for_each_prior_init, object_for_each_prior_init = overlap_init.max(dim=0)  # (5685)
+            overlap_for_each_prior_refine, object_for_each_prior_refine = overlap_refine.max(dim=0)  # (5685)
 
             # We don't want a situation where an object is not represented in our positive (non-background) priors -
             # 1. An object might not be the best object for all priors, and is therefore not in object_for_each_prior.
@@ -793,36 +810,46 @@ class RepPointLoss(nn.Module):
 
             # To remedy this -
             # First, find the prior that has the maximum overlap for each object.
-            _, prior_for_each_object = overlap.max(dim=1)  # (N_o)
+            _, prior_for_each_object_init = overlap_init.max(dim=1)  # (N_o)
+            _, prior_for_each_object_refine = overlap_refine.max(dim=1)  # (N_o)
 
             # Then, assign each object to the corresponding maximum-overlap-prior. (This fixes 1.)
-            object_for_each_prior[prior_for_each_object] = torch.LongTensor(range(n_objects)).to(device)
+            object_for_each_prior_init[prior_for_each_object_init] = torch.LongTensor(range(n_objects)).to(device)
+            object_for_each_prior_refine[prior_for_each_object_refine] = torch.LongTensor(range(n_objects)).to(device)
 
             # To ensure these priors qualify, artificially give them an overlap of greater than 0.5. (This fixes 2.)
-            overlap_for_each_prior[prior_for_each_object] = 1.
+            overlap_for_each_prior_init[prior_for_each_object_init] = 1.
+            overlap_for_each_prior_refine[prior_for_each_object_refine] = 1.
 
             # Labels for each prior
-            label_for_each_prior = labels[i][object_for_each_prior]  # (5685), labels[i] is (n_object)
+            label_for_each_prior = labels[i][object_for_each_prior_refine]  # (5685), labels[i] is (n_object)
+            label_for_each_prior_init = labels[i][object_for_each_prior_init]  # (5685), labels[i] is (n_object)
 
             # print(label_for_each_prior.size(), labels[i].size())
             # exit()
 
             # Set priors whose overlaps with objects are less than the threshold to be background (no object)
-            label_for_each_prior[overlap_for_each_prior < self.threshold] = 0  # (5685)
+            label_for_each_prior[overlap_for_each_prior_refine < self.threshold] = 0  # (5685)
+            label_for_each_prior_init[overlap_for_each_prior_init < self.threshold] = 0  # (5685)
 
             # Store
             true_classes[i] = label_for_each_prior
+            true_classes_init[i] = label_for_each_prior_init
 
             # Encode center-size object coordinates into the form we regressed predicted boxes to
-            true_locs[i] = cxcy_to_gcxgcy(xy_to_cxcy(boxes[i][object_for_each_prior]), self.priors_cxcy)  # (5685, 4)
+            # true_locs[i] = cxcy_to_gcxgcy(xy_to_cxcy(boxes[i][object_for_each_prior]), self.priors_cxcy)  # (5685, 4)
+            true_locs_init[i] = boxes[i][object_for_each_prior_init]
+            true_locs_refine[i] = boxes[i][object_for_each_prior_refine]
 
         # Identify priors that are positive (object/non-background)
-        positive_priors = true_classes != 0  # (N, 5685)
+        positive_priors_refine = true_classes != 0  # (N, 5685)
+        positive_priors_init = true_classes_init != 0
 
         # LOCALIZATION LOSS
 
         # Localization loss is computed only over positive (non-background) priors
-        loc_loss = self.smooth_l1(predicted_bbox[positive_priors], true_locs[positive_priors])  # (), scalar
+        loc_loss_init = self.smooth_l1(predicted_bbox_init[positive_priors_init], true_locs_init[positive_priors_init])  # (), scalar
+        loc_loss_refine = self.smooth_l1(predicted_bbox_refine[positive_priors_refine], true_locs_refine[positive_priors_refine])
 
         # Note: indexing with a torch.uint8 (byte) tensor flattens the tensor when indexing is across multiple dimensions (N & 5685)
         # So, if predicted_locs has the shape (N, 5685, 4), predicted_locs[positive_priors] will have (total positives, 4)
@@ -835,29 +862,47 @@ class RepPointLoss(nn.Module):
         # This is called Hard Negative Mining - it concentrates on hardest negatives in each image, and also minimizes pos/neg imbalance
 
         # Number of positive and hard-negative priors per image
-        n_positives = positive_priors.sum(dim=1)  # (N)
-        n_hard_negatives = self.neg_pos_ratio * n_positives  # (N)
+        n_positives_init = positive_priors_init.sum(dim=1)  # (N)
+        n_positives_refine = positive_priors_refine.sum(dim=1)  # (N)
+        n_hard_negatives_init = (self.neg_pos_ratio - 1) * n_positives_init  # (N)
+        n_hard_negatives_refine = self.neg_pos_ratio * n_positives_refine
 
         # First, find the loss for all priors
-        conf_loss_all = self.cross_entropy(predicted_scores.view(-1, n_classes), true_classes.view(-1))  # (N * 5685)
-        conf_loss_all = conf_loss_all.view(batch_size, n_priors)  # (N, 5685)
+        # predicted_scores_all = torch.cat([predicted_init, predicted_scores], dim=1)
+        # true_classes_all = torch.cat([true_classes_init, true_classes], dim=1)
+        conf_loss_all_init = self.cross_entropy(predicted_init.view(-1, n_classes), true_classes_init.view(-1))  # (N * 5685)
+        conf_loss_all_refine = self.cross_entropy(predicted_scores.view(-1, n_classes), true_classes.view(-1))
+        conf_loss_all_init = conf_loss_all_init.view(batch_size, n_priors)  # (N, 5685)
+        conf_loss_all_refine = conf_loss_all_refine.view(batch_size, n_priors)
 
         # We already know which priors are positive
-        conf_loss_pos = conf_loss_all[positive_priors]  # (sum(n_positives))
+        conf_loss_pos_init = conf_loss_all_init[positive_priors_init]  # (sum(n_positives))
+        conf_loss_pos_refine = conf_loss_all_refine[positive_priors_refine]
 
         # Next, find which priors are hard-negative
         # To do this, sort ONLY negative priors in each image in order of decreasing loss and take top n_hard_negatives
-        conf_loss_neg = conf_loss_all.clone()  # (N, 5685)
-        conf_loss_neg[positive_priors] = 0.  # (N, 5685), positive priors are ignored (never in top n_hard_negatives)
-        conf_loss_neg, _ = conf_loss_neg.sort(dim=1, descending=True)  # (N, 5685), sorted by decreasing hardness
-        hardness_ranks = torch.LongTensor(range(n_priors)).unsqueeze(0).expand_as(conf_loss_neg).to(device)  # (N, 5685)
+        conf_loss_neg_init = conf_loss_all_init.clone()  # (N, 5685)
+        conf_loss_neg_refine = conf_loss_all_refine.clone()  # (N, 5685)
 
-        hard_negatives = hardness_ranks < n_hard_negatives.unsqueeze(1)  # (N, 5685)
-        conf_loss_hard_neg = conf_loss_neg[hard_negatives]  # (sum(n_hard_negatives))
+        conf_loss_neg_init[positive_priors_init] = 0.  # (N, 5685), positive priors are ignored (never in top n_hard_negatives)
+        conf_loss_neg_init, _ = conf_loss_neg_init.sort(dim=1, descending=True)  # (N, 5685), sorted by decreasing hardness
+        hardness_ranks = torch.LongTensor(range(n_priors)).unsqueeze(0).expand_as(conf_loss_neg_init).to(device)  # (N, 5685)
+        hard_negatives = hardness_ranks < n_hard_negatives_init.unsqueeze(1)  # (N, 5685)
+        conf_loss_hard_neg_init = conf_loss_neg_init[hard_negatives]  # (sum(n_hard_negatives))
+
+        conf_loss_neg_refine[
+            positive_priors_refine] = 0.  # (N, 5685), positive priors are ignored (never in top n_hard_negatives)
+        conf_loss_neg_refine, _ = conf_loss_neg_refine.sort(dim=1,
+                                                        descending=True)  # (N, 5685), sorted by decreasing hardness
+        hardness_ranks = torch.LongTensor(range(n_priors)).unsqueeze(0).expand_as(conf_loss_neg_refine).to(
+            device)  # (N, 5685)
+        hard_negatives = hardness_ranks < n_hard_negatives_init.unsqueeze(1)  # (N, 5685)
+        conf_loss_hard_neg_refine = conf_loss_neg_refine[hard_negatives]  # (sum(n_hard_negatives))
 
         # As in the paper, averaged over positive priors only, although computed over both positive and hard-negative priors
-        conf_loss = (conf_loss_hard_neg.sum() + conf_loss_pos.sum()) / n_positives.sum().float()  # (), scalar
+        conf_loss = (conf_loss_hard_neg_init.sum() + conf_loss_pos_init.sum()) / n_positives_init.sum().float() + \
+                    (conf_loss_hard_neg_refine.sum() + conf_loss_pos_refine.sum()) / n_positives_refine.sum().float()  # (), scalar
 
         # TOTAL LOSS
 
-        return conf_loss + self.alpha * loc_loss
+        return conf_loss + self.alpha * (loc_loss_init + loc_loss_refine)

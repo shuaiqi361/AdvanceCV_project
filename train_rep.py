@@ -28,11 +28,11 @@ batch_size = 32  # batch size
 internal_batchsize = 2
 num_iter_flag = batch_size // internal_batchsize
 
-iterations = 120000 * num_iter_flag  # number of iterations to train
+iterations = 100000 * num_iter_flag  # number of iterations to train
 workers = 4  # number of workers for loading data in the DataLoader
 print_freq = 3200  # print training status every __ batches
 lr = 1e-3  # learning rate
-decay_lr_at = [80000 * num_iter_flag, 100000 * num_iter_flag]  # decay learning rate after these many iterations
+decay_lr_at = [70000 * num_iter_flag, 90000 * num_iter_flag]  # decay learning rate after these many iterations
 decay_lr_to = 0.1  # decay learning rate to this fraction of the existing learning rate
 momentum = 0.9  # momentum
 weight_decay = 5e-4  # weight decay
@@ -72,7 +72,7 @@ def main():
 
     # Move to default device
     model = model.to(device)
-    criterion = RepPointLoss(priors_xy=model.priors_xy).to(device)
+    criterion = RepPointLoss().to(device)
 
     # Custom dataloaders
     train_dataset = PascalVOCDataset(data_folder,
@@ -158,10 +158,11 @@ def train(train_loader, model, criterion, optimizer, epoch):
         labels = [l.to(device) for l in labels]
 
         # Forward prop.
-        predicted_locs, predicted_scores = model(images)  # (N, 8732, 4), (N, 8732, n_classes)
+        predicted_locs_init, predicted_locs_refine, predicted_init, predicted_scores = model(images)  # (N, 8732, 4), (N, 8732, n_classes)
 
         # Loss
-        loss = criterion(predicted_locs, predicted_scores, boxes, labels) / num_iter_flag  # scalar
+        loss = criterion(predicted_locs_init, predicted_locs_refine, predicted_init,
+                         predicted_scores, boxes, labels) / num_iter_flag  # scalar
 
         # Backward prop.
         if i % num_iter_flag == 0 and i != 0:
@@ -201,7 +202,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
             #       'Loss {loss.val:.4f} ({loss.avg:.4f})\t'.format(epoch, i, len(train_loader),
             #                                                       batch_time=batch_time,
             #                                                       data_time=data_time, loss=losses))
-    del predicted_locs, predicted_scores, images, boxes, labels  # free some memory since their histories may be stored
+    del predicted_locs_init, predicted_locs_refine, predicted_init, predicted_scores, images, boxes, labels  # free some memory since their histories may be stored
 
 
 def evaluate(test_loader, model):
@@ -232,7 +233,7 @@ def evaluate(test_loader, model):
 
             # Forward prop.
             time_start = time.time()
-            predicted_locs, predicted_scores = model(images)
+            _, predicted_locs, _, predicted_scores = model(images)
             time_end = time.time()
 
 
