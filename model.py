@@ -9,9 +9,11 @@ import numpy as np
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # device = 'cpu'
 
+
 class VGGBase(nn.Module):
     """
-    VGG base convolutions to produce lower-level feature maps.
+    VGG base convolutions to produce lower-level feature maps
+    Feel free to substitute with other pre-trained backbones
     """
 
     def __init__(self):
@@ -338,7 +340,7 @@ class SSD300(nn.Module):
         # Since lower level features (conv4_3_feats) have considerably larger scales, we take the L2 norm and rescale
         # Rescale factor is initially set at 20, but is learned for each channel during back-prop
         self.rescale_factors = nn.Parameter(torch.FloatTensor(1, 512, 1, 1))  # there are 512 channels in conv4_3_feats
-        nn.init.constant_(self.rescale_factors, 20)
+        nn.init.constant_(self.rescale_factors, 20.)
 
         # Prior boxes
         self.priors_cxcy = self.create_prior_boxes()
@@ -357,7 +359,6 @@ class SSD300(nn.Module):
         norm = conv4_3_feats.pow(2).sum(dim=1, keepdim=True).sqrt()  # (N, 1, 38, 38)
         conv4_3_feats = conv4_3_feats / norm  # (N, 512, 38, 38)
         conv4_3_feats = conv4_3_feats * self.rescale_factors  # (N, 512, 38, 38)
-        # (PyTorch autobroadcasts singleton dimensions during arithmetic)
 
         # Run auxiliary convolutions (higher level feature map generators)
         conv8_2_feats, conv9_2_feats, conv10_2_feats, conv11_2_feats = \
@@ -403,7 +404,7 @@ class SSD300(nn.Module):
         for k, fmap in enumerate(fmaps):
             for i in range(fmap_dims[fmap]):
                 for j in range(fmap_dims[fmap]):
-                    cx = (j + 0.5) / fmap_dims[fmap]
+                    cx = (j + 0.5) / fmap_dims[fmap]  # sliding center locations across the feature maps
                     cy = (i + 0.5) / fmap_dims[fmap]
 
                     for ratio in aspect_ratios[fmap]:
@@ -413,8 +414,9 @@ class SSD300(nn.Module):
                         # scale of the current feature map and the scale of the next feature map
                         if ratio == 1.:
                             try:
+                                # use the geometric mean to calculate the additional scale for each level of fmap
                                 additional_scale = sqrt(obj_scales[fmap] * obj_scales[fmaps[k + 1]])
-                            # For the last feature map, there is no "next" feature map
+                            # For the last object scale, there is no "next" scale
                             except IndexError:
                                 additional_scale = 1.
                             prior_boxes.append([cx, cy, additional_scale, additional_scale])
@@ -592,6 +594,9 @@ class MultiBoxLoss(nn.Module):
         self.cross_entropy = nn.CrossEntropyLoss(reduce=False)
 
     def increase_threshold(self, increment=0.1):
+        if self.threshold >= 0.7:
+            return
+
         self.threshold += increment
 
     def forward(self, predicted_locs, predicted_scores, boxes, labels):
@@ -620,7 +625,7 @@ class MultiBoxLoss(nn.Module):
             overlap = find_jaccard_overlap(boxes[i],
                                            self.priors_xy)  # (n_objects, 8732)
 
-            # For each prior, find the object that has the maximum overlap
+            # For each prior, find the object that has the maximum overlap, return [value, indices]
             overlap_for_each_prior, object_for_each_prior = overlap.max(dim=0)  # (8732)
 
             # We don't want a situation where an object is not represented in our positive (non-background) priors -
@@ -637,8 +642,14 @@ class MultiBoxLoss(nn.Module):
             # To ensure these priors qualify, artificially give them an overlap of greater than 0.5. (This fixes 2.)
             overlap_for_each_prior[prior_for_each_object] = 1.
 
+
+
             # Labels for each prior
-            label_for_each_prior = labels[i][object_for_each_prior]  # (8732)
+            label_for_each_prior = labels[i][object_for_each_prior]  # (8732), labels[i] is (n_object)
+
+            # print(label_for_each_prior.size(), labels[i].size())
+            # exit()
+
             # Set priors whose overlaps with objects are less than the threshold to be background (no object)
             label_for_each_prior[overlap_for_each_prior < self.threshold] = 0  # (8732)
 
@@ -683,6 +694,7 @@ class MultiBoxLoss(nn.Module):
         conf_loss_neg[positive_priors] = 0.  # (N, 8732), positive priors are ignored (never in top n_hard_negatives)
         conf_loss_neg, _ = conf_loss_neg.sort(dim=1, descending=True)  # (N, 8732), sorted by decreasing hardness
         hardness_ranks = torch.LongTensor(range(n_priors)).unsqueeze(0).expand_as(conf_loss_neg).to(device)  # (N, 8732)
+
         hard_negatives = hardness_ranks < n_hard_negatives.unsqueeze(1)  # (N, 8732)
         conf_loss_hard_neg = conf_loss_neg[hard_negatives]  # (sum(n_hard_negatives))
 
