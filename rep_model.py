@@ -448,6 +448,7 @@ class SSD300RepPoint(nn.Module):
 
         # Prior boxes
         self.rep_points_xy = self.create_rep_points()
+        self.priors_xy = self.rep2bbox(self.rep_points_xy)
 
     def forward(self, image):
         """

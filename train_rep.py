@@ -2,7 +2,7 @@ import time
 import torch.backends.cudnn as cudnn
 import torch.optim
 import torch.utils.data
-from rep_model import RepPointLoss, SSD300RepPoint
+from rep_model import SSD300RepPoint, RepPointLoss
 from datasets import PascalVOCDataset
 from utils import *
 from tqdm import tqdm
@@ -14,7 +14,7 @@ pp = PrettyPrinter()
 
 # Data parameters
 data_folder = 'data'  # folder with data files
-f_log = open('log/train_log.txt', 'w')
+f_log = open('log/rep_train_log.txt', 'w')
 keep_difficult = True  # use objects considered difficult to detect?
 
 # Model parameters
@@ -24,12 +24,15 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Learning parameters
 checkpoint = None  # path to model checkpoint, None if none
-batch_size = 2  # batch size
-iterations = 240000  # number of iterations to train
+batch_size = 32  # batch size
+internal_batchsize = 2
+num_iter_flag = batch_size // internal_batchsize
+
+iterations = 120000 * num_iter_flag  # number of iterations to train
 workers = 4  # number of workers for loading data in the DataLoader
-print_freq = 2000  # print training status every __ batches
+print_freq = 3200  # print training status every __ batches
 lr = 1e-3  # learning rate
-decay_lr_at = [160000, 200000]  # decay learning rate after these many iterations
+decay_lr_at = [80000 * num_iter_flag, 100000 * num_iter_flag]  # decay learning rate after these many iterations
 decay_lr_to = 0.1  # decay learning rate to this fraction of the existing learning rate
 momentum = 0.9  # momentum
 weight_decay = 5e-4  # weight decay
@@ -47,7 +50,7 @@ def main():
     # Initialize model or load checkpoint
     if checkpoint is None:
         start_epoch = 0
-        model = SSD300(n_classes=n_classes)
+        model = SSD300RepPoint(n_classes=n_classes)
         # Initialize the optimizer, with twice the default learning rate for biases, as in the original Caffe repo
         biases = list()
         not_biases = list()
@@ -69,13 +72,13 @@ def main():
 
     # Move to default device
     model = model.to(device)
-    criterion = MultiBoxLoss(priors_cxcy=model.priors_cxcy).to(device)
+    criterion = RepPointLoss(priors_xy=model.priors_xy).to(device)
 
     # Custom dataloaders
     train_dataset = PascalVOCDataset(data_folder,
                                      split='train',
                                      keep_difficult=keep_difficult)
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True,
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=internal_batchsize, shuffle=True,
                                                collate_fn=train_dataset.collate_fn, num_workers=workers,
                                                pin_memory=True)  # note that we're passing the collate function here
 
@@ -83,16 +86,16 @@ def main():
     test_dataset = PascalVOCDataset(data_folder,
                                     split='test',
                                     keep_difficult=keep_difficult)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False,
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=internal_batchsize, shuffle=False,
                                               collate_fn=test_dataset.collate_fn, num_workers=workers, pin_memory=True)
 
     # Calculate total number of epochs to train and the epochs to decay learning rate at (i.e. convert iterations to epochs)
     # To convert iterations to epochs, divide iterations by the number of iterations per epoch
     # The paper trains for 120,000 iterations with a batch size of 32, decays after 80,000 and 100,000 iterations
 
-    epochs = iterations // (len(train_dataset) // 32)
+    epochs = iterations // (len(train_dataset) // internal_batchsize)
     # print('Length of dataset:', len(train_dataset), epochs)
-    decay_lr_at = [it // (len(train_dataset) // 32) for it in decay_lr_at]
+    decay_lr_at = [it // (len(train_dataset) // internal_batchsize) for it in decay_lr_at]
     print('total train epochs: ', epochs)
 
     # Epochs
@@ -112,16 +115,16 @@ def main():
               epoch=epoch)
 
         # Save checkpoint
-        if epoch >= 200 and epoch % 50 == 0:
+        if epoch >= 80 and epoch % 30 == 0:
             _, current_mAP = evaluate(test_loader, model)
             if current_mAP > best_mAP:
-                save_checkpoint(epoch, model, optimizer, name='checkpoints/my_checkpoint_deform300.pth.tar')
+                save_checkpoint(epoch, model, optimizer, name='checkpoints/my_checkpoint_rep300_b32.pth.tar')
                 best_mAP = current_mAP
-                criterion.increase_threshold(0.05)
+                # criterion.increase_threshold(0.05)
 
     _, current_mAP = evaluate(test_loader, model)
     if current_mAP > best_mAP:
-        save_checkpoint(epoch, model, optimizer, name='checkpoints/my_checkpoint_deform300.pth.tar')
+        save_checkpoint(epoch, model, optimizer, name='checkpoints/my_checkpoint_rep300_b32.pth.tar')
         best_mAP = current_mAP
 
 
@@ -142,8 +145,10 @@ def train(train_loader, model, criterion, optimizer, epoch):
     losses = AverageMeter()  # loss
 
     start = time.time()
+    optimizer.zero_grad()
 
     # Batches
+    # loss_mini_batch = list()
     for i, (images, boxes, labels, _) in enumerate(train_loader):
         data_time.update(time.time() - start)
 
@@ -156,20 +161,26 @@ def train(train_loader, model, criterion, optimizer, epoch):
         predicted_locs, predicted_scores = model(images)  # (N, 8732, 4), (N, 8732, n_classes)
 
         # Loss
-        loss = criterion(predicted_locs, predicted_scores, boxes, labels)  # scalar
+        loss = criterion(predicted_locs, predicted_scores, boxes, labels) / num_iter_flag  # scalar
 
         # Backward prop.
-        optimizer.zero_grad()
-        loss.backward()
+        if i % num_iter_flag == 0 and i != 0:
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+        else:
+            loss.backward()
 
-        # Clip gradients, if necessary
-        if grad_clip is not None:
-            clip_gradient(optimizer, grad_clip)
+        # loss.backward()
+        # optimizer.step()
+        # optimizer.zero_grad()
 
-        # Update model
-        optimizer.step()
 
-        losses.update(loss.item(), images.size(0))
+        # # Clip gradients, if necessary
+        # if grad_clip is not None:
+        #     clip_gradient(optimizer, grad_clip)
+
+        losses.update(loss.item() * num_iter_flag, images.size(0))
         batch_time.update(time.time() - start)
 
         start = time.time()
@@ -222,13 +233,14 @@ def evaluate(test_loader, model):
             # Forward prop.
             time_start = time.time()
             predicted_locs, predicted_scores = model(images)
+            time_end = time.time()
 
 
             # Detect objects in SSD output
             det_boxes_batch, det_labels_batch, det_scores_batch = model.detect_objects(predicted_locs, predicted_scores,
                                                                                        min_score=0.01, max_overlap=0.5,
                                                                                        top_k=100)
-            time_end = time.time()
+
             # Evaluation MUST be at min_score=0.01, max_overlap=0.45, top_k=200 for fair comparision with the paper's results and other repos
 
             # Store this batch's results for mAP calculation
