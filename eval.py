@@ -7,15 +7,16 @@ from pprint import PrettyPrinter
 pp = PrettyPrinter()
 
 # Parameters
-data_folder = './'
+data_folder = 'data/'
 keep_difficult = True  # difficult ground truth objects must always be considered in mAP calculation, because these objects DO exist!
-batch_size = 32
+batch_size = 2
 workers = 4
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # device = 'cpu'
 print(device, 'available for usage.')
 # checkpoint = './checkpoint_ssd300.pth.tar'
-checkpoint = './original_ssd300.pth.tar'
+# checkpoint = './checkpoints/my_checkpoint_deform300_b32.pth.tar'
+checkpoint = '/home/keyi/Documents/courses/AdvancedCV/project/advanced_cv_project/my_checkpoint_ssd300.pth.tar'
 
 # Load model checkpoint that is to be evaluated
 checkpoint = torch.load(checkpoint)
