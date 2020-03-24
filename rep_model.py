@@ -433,7 +433,7 @@ class SSD300RepPoint(nn.Module):
     Default 9 RepPoints at each location
     """
 
-    def __init__(self, n_classes, n_points=9, center_init=True, transform_method='moment'):
+    def __init__(self, n_classes, n_points=9, center_init=False, transform_method='moment'):
         super(SSD300RepPoint, self).__init__()
 
         self.n_classes = n_classes
@@ -488,8 +488,9 @@ class SSD300RepPoint(nn.Module):
                                                                  conv11_2_feats)  # (N, 5685, 4), (N, 5685, n_classes)
 
         # print('479:', (locs_init + self.rep_points_xy + locs_refine).size())
-        return self.rep2bbox(locs_init + self.rep_points_xy), \
-               self.rep2bbox(locs_init + self.rep_points_xy + locs_refine), classes_init, classes_scores
+        init_out = locs_init + self.rep_points_xy
+        return self.rep2bbox(init_out), \
+               self.rep2bbox(init_out + locs_refine), classes_init, classes_scores
 
     def create_rep_points(self):
         """
@@ -548,16 +549,19 @@ class SSD300RepPoint(nn.Module):
                     else:
                         # initialize a grid topology of reppoints
                         n_point_side = int(sqrt(self.n_points))
-                        for s in range(len(obj_scales[fmap])):
+                        for s in range(n_boxes[fmap]):
                             scale = obj_scales[fmap][s]
-                            interval = torch.linspace(0., scale, n_point_side)
+                            interval = scale / (n_point_side - 1)
                             points = list()
-                            for p in range(self.n_points):
-                                for q in range(self.n_points):
+                            for p in range(n_point_side):
+                                for q in range(n_point_side):
                                     points.append(cx - 0.5 * scale + p * interval)
                                     points.append(cy - 0.5 * scale + q * interval)
                             rep_point_sets.append(points)
+                            # print(points)
+                            # exit()
 
+        # print(rep_point_sets)
         prior_points = torch.FloatTensor(rep_point_sets).to(device)
         prior_points.clamp_(0, 1)  # (5685, 18)
 
@@ -650,6 +654,8 @@ class SSD300RepPoint(nn.Module):
         # print(n_priors, predicted_locs.size(), predicted_scores.size())
         predicted_scores = F.softmax(predicted_scores, dim=2)  # (N, 5685, n_classes)
         decoded_locs = predicted_locs  # convert reppoints to bounding boxes
+        # print(decoded_locs.size(), predicted_scores.size())
+        # exit()
 
         # Lists to store final predicted boxes, labels, and scores for all images
         all_images_boxes = list()
@@ -675,11 +681,14 @@ class SSD300RepPoint(nn.Module):
                 if n_above_min_score == 0:
                     continue
 
+                # print(c, class_scores.size())
                 class_scores = class_scores[torch.nonzero(score_above_min_score)].squeeze(
                     dim=1)  # (n_qualified), n_min_score <= 5685
 
-                class_decoded_locs = decoded_locs[torch.nonzero(score_above_min_score)].squeeze(
+                class_decoded_locs = decoded_locs[i][torch.nonzero(score_above_min_score)].squeeze(
                     dim=1)  # (n_qualified, 4)
+                # print(class_decoded_locs.size())
+                # exit()
 
                 # Sort predicted boxes and scores by scores
                 class_scores, sort_ind = class_scores.sort(dim=0, descending=True)  # (n_qualified), (n_min_score)

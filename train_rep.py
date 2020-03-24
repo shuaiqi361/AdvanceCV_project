@@ -31,7 +31,7 @@ num_iter_flag = batch_size // internal_batchsize
 iterations = 100000 * num_iter_flag  # number of iterations to train
 workers = 4  # number of workers for loading data in the DataLoader
 print_freq = 3200  # print training status every __ batches
-lr = 1e-3  # learning rate
+lr = 5e-4  # learning rate
 decay_lr_at = [70000 * num_iter_flag, 90000 * num_iter_flag]  # decay learning rate after these many iterations
 decay_lr_to = 0.1  # decay learning rate to this fraction of the existing learning rate
 momentum = 0.9  # momentum
@@ -107,7 +107,7 @@ def main():
         # Decay learning rate at particular epochs
         if epoch in decay_lr_at:
             adjust_learning_rate(optimizer, decay_lr_to)
-        # _, current_mAP = evaluate(test_loader, model)
+
         train(train_loader=train_loader,
               model=model,
               criterion=criterion,
@@ -121,6 +121,8 @@ def main():
                 save_checkpoint(epoch, model, optimizer, name='checkpoints/my_checkpoint_rep300_b32.pth.tar')
                 best_mAP = current_mAP
                 # criterion.increase_threshold(0.05)
+        elif epoch == 50:
+            save_checkpoint(epoch, model, optimizer, name='checkpoints/my_checkpoint_rep300_b32.pth.tar')
 
     _, current_mAP = evaluate(test_loader, model)
     if current_mAP > best_mAP:
