@@ -2,7 +2,8 @@ import time
 import torch.backends.cudnn as cudnn
 import torch.optim
 import torch.utils.data
-from rep_model import SSD300RepPoint, RepPointLoss
+# from rep_model import SSD300RepPoint, RepPointLoss
+from RepPointsModel import SSD300RepPoint, RepPointLoss
 from datasets import PascalVOCDataset
 from utils import *
 from tqdm import tqdm
@@ -31,7 +32,7 @@ num_iter_flag = batch_size // internal_batchsize
 iterations = 100000 * num_iter_flag  # number of iterations to train
 workers = 4  # number of workers for loading data in the DataLoader
 print_freq = 3200  # print training status every __ batches
-lr = 5e-4  # learning rate
+lr = 1e-3  # learning rate
 decay_lr_at = [70000 * num_iter_flag, 90000 * num_iter_flag]  # decay learning rate after these many iterations
 decay_lr_to = 0.1  # decay learning rate to this fraction of the existing learning rate
 momentum = 0.9  # momentum
@@ -72,7 +73,7 @@ def main():
 
     # Move to default device
     model = model.to(device)
-    criterion = RepPointLoss().to(device)
+    criterion = RepPointLoss(rep_point_xy=model.rep_points_xy, scale_weights=model.weights).to(device)
 
     # Custom dataloaders
     train_dataset = PascalVOCDataset(data_folder,

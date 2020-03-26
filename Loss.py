@@ -49,12 +49,30 @@ class FocalLoss(nn.Module):
 class SmoothL1Loss(nn.Module):
     'Smooth L1 Loss'
 
-    def __init__(self, beta=0.11, reduction='mean'):
+    def __init__(self, beta=1.0/9.0, reduction='mean'):
         super().__init__()
         self.beta = beta
         self.reduction = reduction
 
-    def forward(self, pred, target):
+    def forward(self, pred, target, weights=None):
+
+        if weights is not None:
+            print(pred.size(), weights.size())
+
+            x = (pred - target).abs()
+            l1 = x - 0.5 * self.beta
+            l2 = 0.5 * x ** 2 / self.beta
+            l1_loss = torch.where(x >= self.beta, l1, l2)
+            l1_loss = l1_loss / weights
+            print(l1_loss.size())
+            assert pred.size() == target.size() == weights.size()
+            if self.reduction == 'mean':
+                return l1_loss.mean()
+            elif self.reduction == 'sum':
+                return l1_loss.sum()
+            else:
+                return l1_loss
+
         x = (pred - target).abs()
         l1 = x - 0.5 * self.beta
         l2 = 0.5 * x ** 2 / self.beta
