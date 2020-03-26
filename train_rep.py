@@ -35,7 +35,7 @@ lr = 5e-4  # learning rate
 decay_lr_at = [70000 * num_iter_flag, 90000 * num_iter_flag]  # decay learning rate after these many iterations
 decay_lr_to = 0.1  # decay learning rate to this fraction of the existing learning rate
 momentum = 0.9  # momentum
-weight_decay = 5e-4  # weight decay
+weight_decay = 1e-4  # weight decay
 grad_clip = None  # clip if gradients are exploding, which may happen at larger batch sizes (sometimes at 32) - you will recognize it by a sorting error in the MuliBox loss calculation
 
 cudnn.benchmark = True
@@ -50,7 +50,7 @@ def main():
     # Initialize model or load checkpoint
     if checkpoint is None:
         start_epoch = 0
-        model = SSD300RepPoint(n_classes=n_classes)
+        model = SSD300RepPoint(n_classes=n_classes, center_init=False, transform_method='min-max')
         # Initialize the optimizer, with twice the default learning rate for biases, as in the original Caffe repo
         biases = list()
         not_biases = list()
@@ -160,7 +160,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
         labels = [l.to(device) for l in labels]
 
         # Forward prop.
-        predicted_locs_init, predicted_locs_refine, predicted_init, predicted_scores = model(images)  # (N, 8732, 4), (N, 8732, n_classes)
+        predicted_locs_init, predicted_locs_refine, predicted_init, predicted_scores, _ = model(images)  # (N, 8732, 4), (N, 8732, n_classes)
 
         # Loss
         loss = criterion(predicted_locs_init, predicted_locs_refine, predicted_init,
@@ -235,7 +235,7 @@ def evaluate(test_loader, model):
 
             # Forward prop.
             time_start = time.time()
-            _, predicted_locs, _, predicted_scores = model(images)
+            _, predicted_locs, _, predicted_scores, _ = model(images)
             time_end = time.time()
 
 

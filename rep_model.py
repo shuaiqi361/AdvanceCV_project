@@ -490,7 +490,8 @@ class SSD300RepPoint(nn.Module):
         # print('479:', (locs_init + self.rep_points_xy + locs_refine).size())
         init_out = locs_init + self.rep_points_xy
         return self.rep2bbox(init_out), \
-               self.rep2bbox(init_out + locs_refine), classes_init, classes_scores
+               self.rep2bbox(init_out + locs_refine), classes_init, classes_scores, \
+               init_out + locs_refine
 
     def create_rep_points(self):
         """
@@ -580,10 +581,10 @@ class SSD300RepPoint(nn.Module):
             pts_y = points_reshape[:, 1, :]
 
             if self.transform_method == 'min-max':
-                bbox_left = pts_x.min(dim=1, keepdim=True)
-                bbox_right = pts_x.max(dim=1, keepdim=True)
-                bbox_top = pts_y.min(dim=1, keepdim=True)
-                bbox_bottom = pts_y.max(dim=1, keep=True)
+                bbox_left = pts_x.min(dim=1, keepdim=True)[0]
+                bbox_right = pts_x.max(dim=1, keepdim=True)[0]
+                bbox_top = pts_y.min(dim=1, keepdim=True)[0]
+                bbox_bottom = pts_y.max(dim=1, keepdim=True)[0]
                 bbox = torch.cat([bbox_left, bbox_top, bbox_right, bbox_bottom], dim=1)
             elif self.transform_method == 'moment':
                 pts_x_mean = pts_x.mean(dim=1, keepdim=True)
@@ -611,10 +612,11 @@ class SSD300RepPoint(nn.Module):
         pts_y = points_reshape[:, :, 1, :]
 
         if self.transform_method == 'min-max':
-            bbox_left = pts_x.min(dim=2, keepdim=True)
-            bbox_right = pts_x.max(dim=2, keepdim=True)
-            bbox_top = pts_y.min(dim=2, keepdim=True)
-            bbox_bottom = pts_y.max(dim=2, keep=True)
+            bbox_left = pts_x.min(dim=2, keepdim=True)[0]
+            bbox_right = pts_x.max(dim=2, keepdim=True)[0]
+            bbox_top = pts_y.min(dim=2, keepdim=True)[0]
+            bbox_bottom = pts_y.max(dim=2, keepdim=True)[0]
+            # print(bbox_left.size(),  bbox_right.size())  # bs, 5685, 1
             bbox = torch.cat([bbox_left, bbox_top, bbox_right, bbox_bottom], dim=2)
         elif self.transform_method == 'moment':
             pts_x_mean = pts_x.mean(dim=2, keepdim=True)
@@ -759,7 +761,7 @@ class RepPointLoss(nn.Module):
     (2) a confidence loss for the predicted class scores.
     """
 
-    def __init__(self, threshold=0.5, neg_pos_ratio=3, alpha=1.):
+    def __init__(self, threshold=0.5, neg_pos_ratio=3, alpha=2.):
         super(RepPointLoss, self).__init__()
         # self.priors_xy = priors_xy
         self.threshold = threshold
@@ -905,13 +907,13 @@ class RepPointLoss(nn.Module):
                                                         descending=True)  # (N, 5685), sorted by decreasing hardness
         hardness_ranks = torch.LongTensor(range(n_priors)).unsqueeze(0).expand_as(conf_loss_neg_refine).to(
             device)  # (N, 5685)
-        hard_negatives = hardness_ranks < n_hard_negatives_init.unsqueeze(1)  # (N, 5685)
+        hard_negatives = hardness_ranks < n_hard_negatives_refine.unsqueeze(1)  # (N, 5685)
         conf_loss_hard_neg_refine = conf_loss_neg_refine[hard_negatives]  # (sum(n_hard_negatives))
 
         # As in the paper, averaged over positive priors only, although computed over both positive and hard-negative priors
-        conf_loss = (conf_loss_hard_neg_init.sum() + conf_loss_pos_init.sum()) / n_positives_init.sum().float() + \
+        conf_loss = (conf_loss_hard_neg_init.sum() + conf_loss_pos_init.sum()) / n_positives_init.sum().float() * 2 + \
                     (conf_loss_hard_neg_refine.sum() + conf_loss_pos_refine.sum()) / n_positives_refine.sum().float()  # (), scalar
 
         # TOTAL LOSS
 
-        return conf_loss + self.alpha * (loc_loss_init + loc_loss_refine)
+        return conf_loss * 0.5 + self.alpha * (loc_loss_init + loc_loss_refine)
