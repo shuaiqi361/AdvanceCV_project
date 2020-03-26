@@ -57,15 +57,14 @@ class SmoothL1Loss(nn.Module):
     def forward(self, pred, target, weights=None):
 
         if weights is not None:
-            print(pred.size(), weights.size())
-
+            # print(pred.size(), target.size(), weights.size())
+            # assert pred.size(1) == target.size(1) == weights.size(0)
             x = (pred - target).abs()
             l1 = x - 0.5 * self.beta
             l2 = 0.5 * x ** 2 / self.beta
             l1_loss = torch.where(x >= self.beta, l1, l2)
-            l1_loss = l1_loss / weights
-            print(l1_loss.size())
-            assert pred.size() == target.size() == weights.size()
+            l1_loss = l1_loss / torch.unsqueeze(weights, dim=1)
+
             if self.reduction == 'mean':
                 return l1_loss.mean()
             elif self.reduction == 'sum':

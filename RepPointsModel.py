@@ -5,7 +5,7 @@ from math import sqrt
 # from itertools import product as product
 import torchvision
 from deform_conv2 import *
-
+from Loss import SmoothL1Loss
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # device = 'cpu'
 
@@ -286,7 +286,7 @@ class PredictionConvolutions(nn.Module):
         for c in self.children():
             if isinstance(c, nn.Conv2d):
                 # nn.init.xavier_uniform_(c.weight)
-                nn.init.normal_(c.weightm, mean=0., std=0.01)
+                nn.init.normal_(c.weight, mean=0., std=0.01)
                 nn.init.constant_(c.bias, 0.)
 
     def forward(self, conv4_3_feats, conv7_feats, conv8_2_feats, conv9_2_feats, conv10_2_feats, conv11_2_feats):
@@ -565,6 +565,7 @@ class SSD300RepPoint(nn.Module):
 
         # print(rep_point_sets)
         prior_points = torch.FloatTensor(rep_point_sets).to(device)
+        rep_point_weights = torch.FloatTensor(rep_point_weights).to(device)
         prior_points.clamp_(0, 1)  # (5685, 18)
 
         return prior_points, rep_point_weights
@@ -772,8 +773,8 @@ class RepPointLoss(nn.Module):
         self.init_loss_weight = init_loss_weight
         self.refine_loss_weight = refine_loss_weight
 
-        self.smooth_l1_init = nn.L1Loss()
-        self.smooth_l1_refine = nn.L1Loss()
+        self.smooth_l1_init = SmoothL1Loss()
+        self.smooth_l1_refine = SmoothL1Loss()
         self.cross_entropy = nn.CrossEntropyLoss(reduce=False)
 
     def increase_threshold(self, increment=0.1):
@@ -869,8 +870,10 @@ class RepPointLoss(nn.Module):
         # LOCALIZATION LOSS
 
         # Localization loss is computed only over positive (non-background) priors
-        loc_loss_init = self.smooth_l1_init(predicted_bbox_init[positive_priors_init], true_locs_init[positive_priors_init], loss_weights_init[positive_priors_init])  # (), scalar
-        loc_loss_refine = self.smooth_l1_refine(predicted_bbox_refine[positive_priors_refine], true_locs_refine[positive_priors_refine], loss_weights_init[positive_priors_refine])
+        # print(loss_weights_init[positive_priors_init].size(), predicted_bbox_init[positive_priors_init].size())
+        # print(loss_weights_init.size(), loss_weights_refine.size())
+        loc_loss_init = self.smooth_l1_init(predicted_bbox_init[positive_priors_init], true_locs_init[positive_priors_init], loss_weights_init[positive_priors_init])
+        loc_loss_refine = self.smooth_l1_refine(predicted_bbox_refine[positive_priors_refine], true_locs_refine[positive_priors_refine], loss_weights_refine[positive_priors_refine])
 
         # Note: indexing with a torch.uint8 (byte) tensor flattens the tensor when indexing is across multiple dimensions (N & 5685)
         # So, if predicted_locs has the shape (N, 5685, 4), predicted_locs[positive_priors] will have (total positives, 4)
