@@ -663,6 +663,7 @@ class SSD300RepPoint(nn.Module):
         all_images_boxes = list()
         all_images_labels = list()
         all_images_scores = list()
+        # all_image_points = list()
 
         assert n_priors == predicted_locs.size(1) == predicted_scores.size(1)
 
@@ -671,6 +672,7 @@ class SSD300RepPoint(nn.Module):
             image_boxes = list()
             image_labels = list()
             image_scores = list()
+            # image_points = list()
 
             # Check for each class
             for c in range(1, self.n_classes):
@@ -687,14 +689,13 @@ class SSD300RepPoint(nn.Module):
                 class_scores = class_scores[torch.nonzero(score_above_min_score)].squeeze(
                     dim=1)  # (n_qualified), n_min_score <= 5685
 
-                class_decoded_locs = decoded_locs[i][torch.nonzero(score_above_min_score)].squeeze(
-                    dim=1)  # (n_qualified, 4)
-                # print(class_decoded_locs.size())
-                # exit()
+                class_decoded_locs = decoded_locs[i][torch.nonzero(score_above_min_score)].squeeze(dim=1)  # (n_qualified, 4)
+                # class_rep_points = rep_points[i][torch.nonzero(score_above_min_score)].squeeze(dim=1)
 
                 # Sort predicted boxes and scores by scores
                 class_scores, sort_ind = class_scores.sort(dim=0, descending=True)  # (n_qualified), (n_min_score)
                 class_decoded_locs = class_decoded_locs[sort_ind]  # (n_min_score, 4)
+                class_rep_points = class_rep_points[sort_ind]
 
                 # Find the overlap between predicted boxes
                 overlap = find_jaccard_overlap(class_decoded_locs, class_decoded_locs)  # (n_qualified, n_min_score)
@@ -721,13 +722,15 @@ class SSD300RepPoint(nn.Module):
                     suppress[box] = 0
 
                 image_boxes.append(class_decoded_locs[torch.nonzero(1 - suppress).squeeze(dim=1)])
-
+                # image_points.append(class_rep_points[torch.nonzero(1 - suppress).squeeze(dim=1)])
                 image_labels.append(torch.LongTensor((1 - suppress).sum().item() * [c]).to(device))
                 image_scores.append(class_scores[torch.nonzero(1 - suppress).squeeze(dim=1)])
 
             # If no object in any class is found, store a placeholder for 'background'
             if len(image_boxes) == 0:
                 image_boxes.append(torch.FloatTensor([[0., 0., 1., 1.]]).to(device))
+                # image_points.append(torch.FloatTensor([[0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5,
+                #                                         0.5, 0.5, 0.5, 0.5, 0.5, 0.5]]).to(device))
                 image_labels.append(torch.LongTensor([0]).to(device))
                 image_scores.append(torch.FloatTensor([0.]).to(device))
 
@@ -735,6 +738,7 @@ class SSD300RepPoint(nn.Module):
             image_boxes = torch.cat(image_boxes, dim=0)  # (n_objects, 4)
             image_labels = torch.cat(image_labels, dim=0)  # (n_objects)
             image_scores = torch.cat(image_scores, dim=0)  # (n_objects)
+            # image_points = torch.cat(image_points, dim=0)  # (n_objects, 18)
             n_objects = image_scores.size(0)
 
             # Keep only the top k objects
@@ -742,14 +746,16 @@ class SSD300RepPoint(nn.Module):
                 image_scores, sort_ind = image_scores.sort(dim=0, descending=True)
                 image_scores = image_scores[:top_k]  # (top_k)
                 image_boxes = image_boxes[sort_ind][:top_k]  # (top_k, 4)
+                # image_points = image_points[sort_ind][:top_k]  # (top_k, 18)
                 image_labels = image_labels[sort_ind][:top_k]  # (top_k)
 
             # Append to lists that store predicted boxes and scores for all images
             all_images_boxes.append(image_boxes)
             all_images_labels.append(image_labels)
             all_images_scores.append(image_scores)
+            # all_image_points.append(image_points)
 
-        return all_images_boxes, all_images_labels, all_images_scores  # lists of length batch_size
+        return all_images_boxes, all_images_labels, all_images_scores  #, all_image_points  # lists of length batch_size
 
 
 class RepPointLoss(nn.Module):

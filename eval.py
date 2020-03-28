@@ -15,8 +15,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # device = 'cpu'
 print(device, 'available for usage.')
 # checkpoint = './checkpoint_ssd300.pth.tar'
-# checkpoint = './checkpoints/my_checkpoint_deform300_b32.pth.tar'
-checkpoint = '/home/keyi/Documents/courses/AdvancedCV/project/advanced_cv_project/my_checkpoint_ssd300.pth.tar'
+checkpoint = './checkpoints/my_checkpoint_deform300_b32.pth.tar'
 
 # Load model checkpoint that is to be evaluated
 checkpoint = torch.load(checkpoint)
@@ -62,7 +61,7 @@ def evaluate(test_loader, model):
             predicted_locs, predicted_scores = model(images)
 
             # Detect objects in SSD output
-            det_boxes_batch, det_labels_batch, det_scores_batch = model.detect_objects(predicted_locs, predicted_scores,
+            det_boxes_batch, det_labels_batch, det_scores_batch, det_points_batch = model.detect_objects(predicted_locs, predicted_scores,
                                                                                        min_score=0.01, max_overlap=0.45,
                                                                                        top_k=200)
             # Evaluation MUST be at min_score=0.01, max_overlap=0.45, top_k=200 for fair comparision with the paper's results and other repos

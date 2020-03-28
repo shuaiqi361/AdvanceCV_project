@@ -15,7 +15,7 @@ pp = PrettyPrinter()
 
 # Data parameters
 data_folder = 'data'  # folder with data files
-f_log = open('log/rep_train_log.txt', 'w')
+f_log = open('log/rep_train_new_log.txt', 'w')
 keep_difficult = True  # use objects considered difficult to detect?
 
 # Model parameters
@@ -29,11 +29,11 @@ batch_size = 32  # batch size
 internal_batchsize = 2
 num_iter_flag = batch_size // internal_batchsize
 
-iterations = 100000 * num_iter_flag  # number of iterations to train
+iterations = 80000 * num_iter_flag  # number of iterations to train
 workers = 4  # number of workers for loading data in the DataLoader
 print_freq = 3200  # print training status every __ batches
 lr = 2e-4  # learning rate
-decay_lr_at = [70000 * num_iter_flag, 90000 * num_iter_flag]  # decay learning rate after these many iterations
+decay_lr_at = [40000 * num_iter_flag, 60000 * num_iter_flag]  # decay learning rate after these many iterations
 decay_lr_to = 0.1  # decay learning rate to this fraction of the existing learning rate
 momentum = 0.9  # momentum
 weight_decay = 1e-4  # weight decay
@@ -109,6 +109,8 @@ def main():
         if epoch in decay_lr_at:
             adjust_learning_rate(optimizer, decay_lr_to)
 
+        # _, current_mAP = evaluate(test_loader, model)
+
         train(train_loader=train_loader,
               model=model,
               criterion=criterion,
@@ -116,7 +118,7 @@ def main():
               epoch=epoch)
 
         # Save checkpoint
-        if epoch >= 50 and epoch % 30 == 0:
+        if epoch >= 30 and epoch % 30 == 0:
             _, current_mAP = evaluate(test_loader, model)
             if current_mAP > best_mAP:
                 save_checkpoint(epoch, model, optimizer, name='checkpoints/my_checkpoint_rep300_b32.pth.tar')
@@ -236,13 +238,14 @@ def evaluate(test_loader, model):
 
             # Forward prop.
             time_start = time.time()
-            _, predicted_locs, _, predicted_scores, _ = model(images)
+            _, predicted_locs, _, predicted_scores, rep_points = model(images)
             time_end = time.time()
 
 
             # Detect objects in SSD output
-            det_boxes_batch, det_labels_batch, det_scores_batch = model.detect_objects(predicted_locs, predicted_scores,
-                                                                                       min_score=0.01, max_overlap=0.5,
+            det_boxes_batch, det_labels_batch, det_scores_batch, det_points_batch = model.detect_objects(predicted_locs,
+                                                                                       predicted_scores, rep_points,
+                                                                                       min_score=0.01, max_overlap=0.45,
                                                                                        top_k=100)
 
             # Evaluation MUST be at min_score=0.01, max_overlap=0.45, top_k=200 for fair comparision with the paper's results and other repos
