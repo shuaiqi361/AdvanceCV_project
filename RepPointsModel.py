@@ -471,6 +471,7 @@ class SSD300RepPoint(nn.Module):
         :return: 5685 locations and class scores (i.e. w.r.t each prior box) for each image
         """
         # Run VGG base network convolutions (lower level feature map generators)
+        batch_size = image.size(0)
         conv4_3_feats, conv7_feats = self.base(image)  # (N, 512, 38, 38), (N, 1024, 19, 19)
 
         # Rescale conv4_3 after L2 norm
@@ -488,7 +489,9 @@ class SSD300RepPoint(nn.Module):
                                                                  conv11_2_feats)  # (N, 5685, 4) x 2, (N, 5685, n_classes) x 2
 
         # print('479:', (locs_init + self.rep_points_xy + locs_refine).size())
-        init_out = locs_init + self.rep_points_xy
+        # init_out = locs_init + self.rep_points_xy
+        # print('reppoint initial size:', self.rep_points_xy.size())
+        init_out = self.rep_points_xy.unsqueeze(dim=0).repeat(batch_size, 1, 1)
         return self.rep2bbox(init_out), \
                self.rep2bbox(init_out + locs_refine), classes_init, classes_scores, \
                init_out + locs_refine
@@ -771,7 +774,7 @@ class RepPointLoss(nn.Module):
     (2) a confidence loss for the predicted class scores.
     """
 
-    def __init__(self, rep_point_xy, scale_weights, threshold=0.5, neg_pos_ratio=3, alpha=1., init_loss_weight=0.5, refine_loss_weight=1.):
+    def __init__(self, rep_point_xy, scale_weights, threshold=0.5, neg_pos_ratio=3, alpha=1.5, init_loss_weight=0.5, refine_loss_weight=1.):
         super(RepPointLoss, self).__init__()
         self.rep_point_xy = rep_point_xy
         self.scale_weights = scale_weights
@@ -807,7 +810,7 @@ class RepPointLoss(nn.Module):
         batch_size = predicted_locs_init.size(0)
         n_priors = predicted_locs_init.size(1)
         n_classes = predicted_scores.size(2)
-
+        # print(predicted_locs_init.size(), predicted_locs_refine.size(), predicted_scores.size())
         assert predicted_locs_init.size(1) == predicted_locs_refine.size(1) == predicted_scores.size(1)
 
         true_locs_init = torch.zeros((batch_size, n_priors, 4), dtype=torch.float).to(device)  # (N, 5685, 4)
@@ -937,5 +940,5 @@ class RepPointLoss(nn.Module):
         conf_loss = (conf_loss_hard_neg_init.sum() + conf_loss_pos_init.sum()) / n_positives_init.sum().float()
 
         # TOTAL LOSS
-
-        return conf_loss + self.alpha * (loc_loss_init * self.init_loss_weight + loc_loss_refine * self.refine_loss_weight)
+        return conf_loss + self.alpha * (loc_loss_refine * self.refine_loss_weight)
+        # return conf_loss + self.alpha * (loc_loss_init * self.init_loss_weight + loc_loss_refine * self.refine_loss_weight)
