@@ -32,11 +32,11 @@ num_iter_flag = batch_size // internal_batchsize
 iterations = 80000 * num_iter_flag  # number of iterations to train
 workers = 4  # number of workers for loading data in the DataLoader
 print_freq = 3200  # print training status every __ batches
-lr = 5e-4  # learning rate
+lr = 2e-4  # learning rate
 decay_lr_at = [40000 * num_iter_flag, 70000 * num_iter_flag]  # decay learning rate after these many iterations
 decay_lr_to = 0.1  # decay learning rate to this fraction of the existing learning rate
 momentum = 0.9  # momentum
-weight_decay = 4e-4  # weight decay
+weight_decay = 1e-4  # weight decay
 grad_clip = None  # clip if gradients are exploding, which may happen at larger batch sizes (sometimes at 32) - you will recognize it by a sorting error in the MuliBox loss calculation
 
 cudnn.benchmark = True

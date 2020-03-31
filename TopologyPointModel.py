@@ -7,7 +7,10 @@ import torchvision
 import numpy as np
 from deform_conv2 import *
 from Loss import SmoothL1Loss
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
 # device = 'cpu'
 
 
@@ -141,19 +144,19 @@ class AuxiliaryConvolutions(nn.Module):
 
         # Auxiliary/additional convolutions on top of the VGG base, RepPoint heads are attached to each of the levels
         self.conv8_1 = nn.Conv2d(1024, 256, kernel_size=1, padding=0)  # stride = 1, by default
-        self.bn8_1 = nn.BatchNorm2d(256)
+        # self.bn8_1 = nn.BatchNorm2d(256)
         self.conv8_2 = DeformConv2d(256, 512, kernel_size=3, stride=2, padding=1)  # dim. reduction because stride > 1
-        self.bn8_2 = nn.BatchNorm2d(512)
+        # self.bn8_2 = nn.BatchNorm2d(512)
 
         self.conv9_1 = nn.Conv2d(512, 128, kernel_size=1, padding=0)
-        self.bn9_1 = nn.BatchNorm2d(128)
+        # self.bn9_1 = nn.BatchNorm2d(128)
         self.conv9_2 = DeformConv2d(128, 256, kernel_size=3, stride=2, padding=1)  # dim. reduction because stride > 1
-        self.bn9_2 = nn.BatchNorm2d(256)
+        # self.bn9_2 = nn.BatchNorm2d(256)
 
         self.conv10_1 = nn.Conv2d(256, 128, kernel_size=1, padding=0)
-        self.bn10_1 = nn.BatchNorm2d(128)
+        # self.bn10_1 = nn.BatchNorm2d(128)
         self.conv10_2 = nn.Conv2d(128, 256, kernel_size=3, padding=0)  # dim. reduction because padding = 0
-        self.bn10_2 = nn.BatchNorm2d(256)
+        # self.bn10_2 = nn.BatchNorm2d(256)
 
         self.conv11_1 = nn.Conv2d(256, 128, kernel_size=1, padding=0)
         self.conv11_2 = nn.Conv2d(128, 256, kernel_size=3, padding=0)  # dim. reduction because padding = 0
@@ -181,16 +184,16 @@ class AuxiliaryConvolutions(nn.Module):
         :param conv7_feats: lower-level conv7 feature map, a tensor of dimensions (N, 1024, 19, 19)
         :return: higher-level feature maps conv8_2, conv9_2, conv10_2, and conv11_2
         """
-        out = F.relu(self.bn8_1(self.conv8_1(conv7_feats)))  # (N, 256, 19, 19)
-        out = F.relu(self.bn8_2(self.conv8_2(out)))  # (N, 512, 10, 10)
+        out = F.relu((self.conv8_1(conv7_feats)))  # (N, 256, 19, 19)
+        out = F.relu((self.conv8_2(out)))  # (N, 512, 10, 10)
         conv8_2_feats = out  # (N, 512, 10, 10)
 
-        out = F.relu(self.bn9_1(self.conv9_1(out)))  # (N, 128, 10, 10)
-        out = F.relu(self.bn9_2(self.conv9_2(out)))  # (N, 256, 5, 5)
+        out = F.relu((self.conv9_1(out)))  # (N, 128, 10, 10)
+        out = F.relu((self.conv9_2(out)))  # (N, 256, 5, 5)
         conv9_2_feats = out  # (N, 256, 5, 5)
 
-        out = F.relu(self.bn10_1(self.conv10_1(out)))  # (N, 128, 5, 5)
-        out = F.relu(self.bn10_2(self.conv10_2(out)))  # (N, 256, 3, 3)
+        out = F.relu((self.conv10_1(out)))  # (N, 128, 5, 5)
+        out = F.relu((self.conv10_2(out)))  # (N, 256, 3, 3)
         conv10_2_feats = out  # (N, 256, 3, 3)
 
         out = F.relu(self.conv11_1(out))  # (N, 128, 3, 3)
@@ -383,7 +386,8 @@ class PredictionConvolutions(nn.Module):
         # Predict classes in localization boxes
         c_conv4_3 = self.cl_conv4_3(conv4_3_feats)  # (N, 3 * n_classes, 38, 38)
         c_conv4_3_out = self.cl_conv4_3_out(torch.cat([F.relu(c_conv4_3), F.relu(l_conv4_3_init)], dim=1))
-        c_conv4_3_out = c_conv4_3_out.permute(0, 2, 3, 1).contiguous()  # (N, 38, 38, 3 * n_classes), to match prior-box order (after .view())
+        c_conv4_3_out = c_conv4_3_out.permute(0, 2, 3,
+                                              1).contiguous()  # (N, 38, 38, 3 * n_classes), to match prior-box order (after .view())
         c_conv4_3_out = c_conv4_3_out.view(batch_size, -1, self.n_classes)
         # c_conv4_3 = c_conv4_3.permute(0, 2, 3, 1).contiguous()
         # c_conv4_3 = c_conv4_3.view(batch_size, -1, self.n_classes)
@@ -503,7 +507,7 @@ class SSD300RepPoint(nn.Module):
         # print('reppoint initial size:', self.rep_points_xy.size())
         prior_out = self.rep_points_xy.unsqueeze(dim=0).repeat(batch_size, 1, 1)
         init_out = prior_out + locs_init
-        final_out = init_out + locs_refine
+        final_out = init_out.detach() + locs_refine
         return self.rep2bbox(prior_out), self.rep2bbox(init_out), \
                self.rep2bbox(final_out), classes_scores, final_out
 
@@ -784,7 +788,8 @@ class RepPointLoss(nn.Module):
     (2) a confidence loss for the predicted class scores.
     """
 
-    def __init__(self, rep_point_xy, scale_weights, threshold=0.5, neg_pos_ratio=3, alpha=1.0, init_loss_weight=1, refine_loss_weight=2.):
+    def __init__(self, rep_point_xy, scale_weights, threshold=0.5, neg_pos_ratio=3, alpha=1.0, init_loss_weight=0.5,
+                 refine_loss_weight=1.):
         super(RepPointLoss, self).__init__()
         self.rep_point_xy = rep_point_xy
         self.scale_weights = scale_weights
@@ -838,7 +843,8 @@ class RepPointLoss(nn.Module):
 
         # For each image
         weights = torch.unsqueeze(self.scale_weights, dim=0)
-        loss_weights_init = weights.repeat(batch_size, 1)  # weights for each predicted bounding box for regression loss,
+        loss_weights_init = weights.repeat(batch_size,
+                                           1)  # weights for each predicted bounding box for regression loss,
         # so that small boxes and larger boxes are penalized equally
         # loss_weights_refine = weights.repeat(batch_size, 1)
         for i in range(batch_size):
@@ -897,8 +903,12 @@ class RepPointLoss(nn.Module):
         # Localization loss is computed only over positive (non-background) priors
         # print(loss_weights_init[positive_priors_init].size(), predicted_bbox_init[positive_priors_init].size())
         # print(loss_weights_init.size(), loss_weights_refine.size())
-        loc_loss_init = self.smooth_l1_init(predicted_bbox_init[positive_priors_init], true_locs_init[positive_priors_init], loss_weights_init[positive_priors_init])
-        loc_loss_refine = self.smooth_l1_refine(predicted_bbox_refine[positive_priors_init], true_locs_init[positive_priors_init], loss_weights_init[positive_priors_init])
+        loc_loss_init = self.smooth_l1_init(predicted_bbox_init[positive_priors_init],
+                                            true_locs_init[positive_priors_init],
+                                            loss_weights_init[positive_priors_init])
+        loc_loss_refine = self.smooth_l1_refine(predicted_bbox_refine[positive_priors_init],
+                                                true_locs_init[positive_priors_init],
+                                                loss_weights_init[positive_priors_init])
 
         # Note: indexing with a torch.uint8 (byte) tensor flattens the tensor when indexing is across multiple dimensions (N & 5685)
         # So, if predicted_locs has the shape (N, 5685, 4), predicted_locs[positive_priors] will have (total positives, 4)
@@ -919,7 +929,8 @@ class RepPointLoss(nn.Module):
         # First, find the loss for all priors
         # predicted_scores_all = torch.cat([predicted_init, predicted_scores], dim=1)
         # true_classes_all = torch.cat([true_classes_init, true_classes], dim=1)
-        conf_loss_all_init = self.cross_entropy(predicted_scores.view(-1, n_classes), true_classes.view(-1))  # (N * 5685)
+        conf_loss_all_init = self.cross_entropy(predicted_scores.view(-1, n_classes),
+                                                true_classes.view(-1))  # (N * 5685)
         # conf_loss_all_refine = self.cross_entropy(predicted_scores.view(-1, n_classes), true_classes.view(-1))
         conf_loss_all_init = conf_loss_all_init.view(batch_size, n_priors)  # (N, 5685)
         # conf_loss_all_refine = conf_loss_all_refine.view(batch_size, n_priors)
@@ -933,9 +944,12 @@ class RepPointLoss(nn.Module):
         conf_loss_neg_init = conf_loss_all_init.clone()  # (N, 5685)
         # conf_loss_neg_refine = conf_loss_all_refine.clone()  # (N, 5685)
 
-        conf_loss_neg_init[positive_priors_init] = 0.  # (N, 5685), positive priors are ignored (never in top n_hard_negatives)
-        conf_loss_neg_init, _ = conf_loss_neg_init.sort(dim=1, descending=True)  # (N, 5685), sorted by decreasing hardness
-        hardness_ranks = torch.LongTensor(range(n_priors)).unsqueeze(0).expand_as(conf_loss_neg_init).to(device)  # (N, 5685)
+        conf_loss_neg_init[
+            positive_priors_init] = 0.  # (N, 5685), positive priors are ignored (never in top n_hard_negatives)
+        conf_loss_neg_init, _ = conf_loss_neg_init.sort(dim=1,
+                                                        descending=True)  # (N, 5685), sorted by decreasing hardness
+        hardness_ranks = torch.LongTensor(range(n_priors)).unsqueeze(0).expand_as(conf_loss_neg_init).to(
+            device)  # (N, 5685)
         hard_negatives = hardness_ranks < n_hard_negatives_init.unsqueeze(1)  # (N, 5685)
         conf_loss_hard_neg_init = conf_loss_neg_init[hard_negatives]  # (sum(n_hard_negatives))
 
@@ -955,4 +969,4 @@ class RepPointLoss(nn.Module):
 
         # TOTAL LOSS
         return conf_loss + self.alpha * (loc_loss_init * self.init_loss_weight +
-                                         loc_loss_refine * self.refine_loss_weight)
+                                             loc_loss_refine * self.refine_loss_weight)
