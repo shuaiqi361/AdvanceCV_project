@@ -33,10 +33,10 @@ iterations = 80000 * num_iter_flag  # number of iterations to train
 workers = 4  # number of workers for loading data in the DataLoader
 print_freq = 3200  # print training status every __ batches
 lr = 5e-4  # learning rate
-decay_lr_at = [40000 * num_iter_flag, 60000 * num_iter_flag]  # decay learning rate after these many iterations
+decay_lr_at = [40000 * num_iter_flag, 70000 * num_iter_flag]  # decay learning rate after these many iterations
 decay_lr_to = 0.1  # decay learning rate to this fraction of the existing learning rate
 momentum = 0.9  # momentum
-weight_decay = 1e-4  # weight decay
+weight_decay = 4e-4  # weight decay
 grad_clip = None  # clip if gradients are exploding, which may happen at larger batch sizes (sometimes at 32) - you will recognize it by a sorting error in the MuliBox loss calculation
 
 cudnn.benchmark = True
@@ -51,7 +51,7 @@ def main():
     # Initialize model or load checkpoint
     if checkpoint is None:
         start_epoch = 0
-        model = SSD300RepPoint(n_classes=n_classes, center_init=False, transform_method='moment')
+        model = SSD300RepPoint(n_classes=n_classes, center_init=False, transform_method='min-max')
         # Initialize the optimizer, with twice the default learning rate for biases, as in the original Caffe repo
         biases = list()
         not_biases = list()
@@ -186,7 +186,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
         # if grad_clip is not None:
         #     clip_gradient(optimizer, grad_clip)
 
-        losses.update(loss.item() * num_iter_flag, internal_batchsize)
+        losses.update(loss.item() * num_iter_flag, images.size(0))
         batch_time.update(time.time() - start)
 
         start = time.time()

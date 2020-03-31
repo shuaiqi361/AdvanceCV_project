@@ -784,7 +784,7 @@ class RepPointLoss(nn.Module):
     (2) a confidence loss for the predicted class scores.
     """
 
-    def __init__(self, rep_point_xy, scale_weights, threshold=0.5, neg_pos_ratio=3, alpha=1.0, init_loss_weight=0.5, refine_loss_weight=1.):
+    def __init__(self, rep_point_xy, scale_weights, threshold=0.5, neg_pos_ratio=3, alpha=1.0, init_loss_weight=1, refine_loss_weight=2.):
         super(RepPointLoss, self).__init__()
         self.rep_point_xy = rep_point_xy
         self.scale_weights = scale_weights
@@ -821,6 +821,7 @@ class RepPointLoss(nn.Module):
         n_priors = predicted_locs_init.size(1)
         n_classes = predicted_scores.size(2)
         # print(predicted_locs_init.size(), predicted_locs_refine.size(), predicted_scores.size())
+        # exit()
         assert predicted_locs_init.size(1) == predicted_locs_refine.size(1) == \
                predicted_scores.size(1) == predicted_priors.size(1)
 
