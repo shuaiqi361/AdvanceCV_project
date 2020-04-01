@@ -507,7 +507,7 @@ class SSD300RepPoint(nn.Module):
         # print('reppoint initial size:', self.rep_points_xy.size())
         prior_out = self.rep_points_xy.unsqueeze(dim=0).repeat(batch_size, 1, 1)
         init_out = prior_out + locs_init
-        final_out = init_out.detach() + locs_refine
+        final_out = init_out + locs_refine
         return self.rep2bbox(prior_out), self.rep2bbox(init_out), \
                self.rep2bbox(final_out), classes_scores, final_out
 
@@ -517,12 +517,12 @@ class SSD300RepPoint(nn.Module):
 
         :return: prior boxes in center-size coordinates, a tensor of dimensions (5685, 18)
         """
-        n_boxes = {'conv4_3': 5,  # the number should be consistent with object scales
-                   'conv7': 5,
-                   'conv8_2': 4,
-                   'conv9_2': 4,
-                   'conv10_2': 3,
-                   'conv11_2': 3}
+        n_boxes = {'conv4_3': 4,  # the number should be consistent with object scales
+                   'conv7': 4,
+                   'conv8_2': 3,
+                   'conv9_2': 3,
+                   'conv10_2': 2,
+                   'conv11_2': 2}
 
         fmap_dims = {'conv4_3': 38,
                      'conv7': 19,
@@ -531,19 +531,19 @@ class SSD300RepPoint(nn.Module):
                      'conv10_2': 3,
                      'conv11_2': 1}
 
-        obj_scales = {'conv4_3': np.linspace(0.05, 0.2, n_boxes['conv4_3']).tolist(),
+        obj_scales = {'conv4_3': np.linspace(0.1, 0.2, n_boxes['conv4_3']).tolist(),
                       'conv7': np.linspace(0.2, 0.35, n_boxes['conv7']).tolist(),
                       'conv8_2': np.linspace(0.35, 0.5, n_boxes['conv8_2']).tolist(),
                       'conv9_2': np.linspace(0.5, 0.65, n_boxes['conv9_2']).tolist(),
                       'conv10_2': np.linspace(0.65, 0.8, n_boxes['conv8_2']).tolist(),
-                      'conv11_2': np.linspace(0.8, 0.95, n_boxes['conv11_2']).tolist()}
+                      'conv11_2': np.linspace(0.8, 0.9, n_boxes['conv11_2']).tolist()}
 
-        # aspect_ratios = {'conv4_3': [1., 2., 0.5],
-        #                  'conv7': [1., 2., 3., 0.5, .333],
-        #                  'conv8_2': [1., 2., 3., 0.5, .333],
-        #                  'conv9_2': [1., 2., 3., 0.5, .333],
-        #                  'conv10_2': [1., 2., 0.5],
-        #                  'conv11_2': [1., 2., 0.5]}
+        aspect_ratios = {'conv4_3': [1., 2., 0.5],
+                         'conv7': [1., 2., 3., 0.5, .333],
+                         'conv8_2': [1., 2., 3., 0.5, .333],
+                         'conv9_2': [1., 2., 3., 0.5, .333],
+                         'conv10_2': [1., 2., 0.5],
+                         'conv11_2': [1., 2., 0.5]}
 
         fmaps = list(fmap_dims.keys())
         rep_point_sets = []
@@ -571,15 +571,20 @@ class SSD300RepPoint(nn.Module):
                         # initialize a grid topology of reppoints
                         n_point_side = int(sqrt(self.n_points))
                         for s in range(n_boxes[fmap]):
-                            scale = obj_scales[fmap][s]
-                            interval = scale / (n_point_side - 1)
-                            points = list()
-                            for p in range(n_point_side):
-                                for q in range(n_point_side):
-                                    points.append(cx - 0.5 * scale + p * interval)
-                                    points.append(cy - 0.5 * scale + q * interval)
-                            rep_point_sets.append(points)
-                            rep_point_weights.append(scale)
+
+                            for asp in aspect_ratios[fmap]:
+                                scale = obj_scales[fmap][s]
+                                width_scale = scale * sqrt(asp)
+                                height_scale = scale / sqrt(asp)
+                                interval_width = width_scale / (n_point_side - 1)
+                                interval_height = height_scale / (n_point_side - 1)
+                                points = list()
+                                for p in range(n_point_side):
+                                    for q in range(n_point_side):
+                                        points.append(cx - 0.5 * scale + p * interval_width)
+                                        points.append(cy - 0.5 * scale + q * interval_height)
+                                rep_point_sets.append(points)
+                                rep_point_weights.append(scale)
 
         # print(rep_point_sets)
         prior_points = torch.FloatTensor(rep_point_sets).to(device)
@@ -788,7 +793,7 @@ class RepPointLoss(nn.Module):
     (2) a confidence loss for the predicted class scores.
     """
 
-    def __init__(self, rep_point_xy, scale_weights, threshold=0.5, neg_pos_ratio=3, alpha=1.0, init_loss_weight=0.5,
+    def __init__(self, rep_point_xy, scale_weights, threshold=0.5, neg_pos_ratio=3, alpha=2.0, init_loss_weight=0.5,
                  refine_loss_weight=1.):
         super(RepPointLoss, self).__init__()
         self.rep_point_xy = rep_point_xy
@@ -968,5 +973,6 @@ class RepPointLoss(nn.Module):
         conf_loss = (conf_loss_hard_neg_init.sum() + conf_loss_pos_init.sum()) / n_positives_init.sum().float()
 
         # TOTAL LOSS
-        return conf_loss + self.alpha * (loc_loss_init * self.init_loss_weight +
-                                             loc_loss_refine * self.refine_loss_weight)
+        # return conf_loss + self.alpha * (loc_loss_init * self.init_loss_weight +
+        #                                      loc_loss_refine * self.refine_loss_weight)
+        return conf_loss + self.alpha * loc_loss_refine
