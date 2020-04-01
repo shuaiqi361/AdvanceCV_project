@@ -231,12 +231,18 @@ class PredictionConvolutions(nn.Module):
         #     self.moment_transfer = nn.Parameter(data=torch.zeros(2), requires_grad=True)
 
         # Number of prior-boxes we are considering per position in each feature map
-        n_boxes = {'conv4_3': 5,
-                   'conv7': 5,
-                   'conv8_2': 4,
-                   'conv9_2': 4,
-                   'conv10_2': 3,
-                   'conv11_2': 3}
+        n_boxes = {'conv4_3': 3 * 3,
+                   'conv7': 3 * 5,
+                   'conv8_2': 2 * 5,
+                   'conv9_2': 2 * 5,
+                   'conv10_2': 2 * 3,
+                   'conv11_2': 2 * 3}
+        aspect_ratios = {'conv4_3': [1., 2., 0.5],
+                         'conv7': [1., 2., 3., 0.5, .333],
+                         'conv8_2': [1., 2., 3., 0.5, .333],
+                         'conv9_2': [1., 2., 3., 0.5, .333],
+                         'conv10_2': [1., 2., 0.5],
+                         'conv11_2': [1., 2., 0.5]}
         # 4 prior-boxes implies we use 4 different aspect ratios, etc.
 
         # Localization prediction convolutions: initial reppoint locations
@@ -256,13 +262,13 @@ class PredictionConvolutions(nn.Module):
         self.loc_conv11_2_refine = nn.Conv2d(256, n_boxes['conv11_2'] * self.n_points * 2, kernel_size=3, padding=1)
 
         # final offsets to refine the initial reppoints
-        self.loc_conv4_3_out = DeformConv2d(n_boxes['conv4_3'] * self.n_points * 4,
+        self.loc_conv4_3_out = nn.Conv2d(n_boxes['conv4_3'] * self.n_points * 4,
                                             n_boxes['conv4_3'] * self.n_points * 2, kernel_size=1, padding=0)
-        self.loc_conv7_out = DeformConv2d(n_boxes['conv7'] * self.n_points * 4, n_boxes['conv7'] * self.n_points * 2,
+        self.loc_conv7_out = nn.Conv2d(n_boxes['conv7'] * self.n_points * 4, n_boxes['conv7'] * self.n_points * 2,
                                           kernel_size=1, padding=0)
-        self.loc_conv8_2_out = DeformConv2d(n_boxes['conv8_2'] * self.n_points * 4,
+        self.loc_conv8_2_out = nn.Conv2d(n_boxes['conv8_2'] * self.n_points * 4,
                                             n_boxes['conv8_2'] * self.n_points * 2, kernel_size=1, padding=0)
-        self.loc_conv9_2_out = DeformConv2d(n_boxes['conv9_2'] * self.n_points * 4,
+        self.loc_conv9_2_out = nn.Conv2d(n_boxes['conv9_2'] * self.n_points * 4,
                                             n_boxes['conv9_2'] * self.n_points * 2, kernel_size=1, padding=0)
         self.loc_conv10_2_out = nn.Conv2d(n_boxes['conv10_2'] * self.n_points * 4,
                                           n_boxes['conv10_2'] * self.n_points * 2, kernel_size=1, padding=0)
@@ -277,13 +283,13 @@ class PredictionConvolutions(nn.Module):
         self.cl_conv10_2 = nn.Conv2d(256, n_boxes['conv10_2'] * n_classes, kernel_size=3, padding=1)
         self.cl_conv11_2 = nn.Conv2d(256, n_boxes['conv11_2'] * n_classes, kernel_size=3, padding=1)
 
-        self.cl_conv4_3_out = DeformConv2d(n_boxes['conv4_3'] * self.n_points * 2 + n_boxes['conv4_3'] * n_classes,
+        self.cl_conv4_3_out = nn.Conv2d(n_boxes['conv4_3'] * self.n_points * 2 + n_boxes['conv4_3'] * n_classes,
                                            n_boxes['conv4_3'] * n_classes, kernel_size=1, padding=0)
-        self.cl_conv7_out = DeformConv2d(n_boxes['conv7'] * self.n_points * 2 + n_boxes['conv7'] * n_classes,
+        self.cl_conv7_out = nn.Conv2d(n_boxes['conv7'] * self.n_points * 2 + n_boxes['conv7'] * n_classes,
                                          n_boxes['conv7'] * n_classes, kernel_size=1, padding=0)
-        self.cl_conv8_2_out = DeformConv2d(n_boxes['conv8_2'] * self.n_points * 2 + n_boxes['conv8_2'] * n_classes,
+        self.cl_conv8_2_out = nn.Conv2d(n_boxes['conv8_2'] * self.n_points * 2 + n_boxes['conv8_2'] * n_classes,
                                            n_boxes['conv8_2'] * n_classes, kernel_size=1, padding=0)
-        self.cl_conv9_2_out = DeformConv2d(n_boxes['conv9_2'] * self.n_points * 2 + n_boxes['conv9_2'] * n_classes,
+        self.cl_conv9_2_out = nn.Conv2d(n_boxes['conv9_2'] * self.n_points * 2 + n_boxes['conv9_2'] * n_classes,
                                            n_boxes['conv9_2'] * n_classes, kernel_size=1, padding=0)
         self.cl_conv10_2_out = nn.Conv2d(n_boxes['conv10_2'] * self.n_points * 2 + n_boxes['conv10_2'] * n_classes,
                                          n_boxes['conv10_2'] * n_classes, kernel_size=1, padding=0)
@@ -506,6 +512,7 @@ class SSD300RepPoint(nn.Module):
         # init_out = locs_init + self.rep_points_xy
         # print('reppoint initial size:', self.rep_points_xy.size())
         prior_out = self.rep_points_xy.unsqueeze(dim=0).repeat(batch_size, 1, 1)
+        # print(prior_out.size(), locs_init.size())
         init_out = prior_out + locs_init
         final_out = init_out + locs_refine
         return self.rep2bbox(prior_out), self.rep2bbox(init_out), \
@@ -517,10 +524,10 @@ class SSD300RepPoint(nn.Module):
 
         :return: prior boxes in center-size coordinates, a tensor of dimensions (5685, 18)
         """
-        n_boxes = {'conv4_3': 4,  # the number should be consistent with object scales
-                   'conv7': 4,
-                   'conv8_2': 3,
-                   'conv9_2': 3,
+        n_boxes = {'conv4_3': 3,  # the number should be consistent with object scales
+                   'conv7': 3,
+                   'conv8_2': 2,
+                   'conv9_2': 2,
                    'conv10_2': 2,
                    'conv11_2': 2}
 
@@ -581,8 +588,8 @@ class SSD300RepPoint(nn.Module):
                                 points = list()
                                 for p in range(n_point_side):
                                     for q in range(n_point_side):
-                                        points.append(cx - 0.5 * scale + p * interval_width)
-                                        points.append(cy - 0.5 * scale + q * interval_height)
+                                        points.append(cx - 0.5 * width_scale + p * interval_width)
+                                        points.append(cy - 0.5 * height_scale + q * interval_height)
                                 rep_point_sets.append(points)
                                 rep_point_weights.append(scale)
 
