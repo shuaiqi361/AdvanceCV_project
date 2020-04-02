@@ -4,3 +4,4 @@ checkpoints/*
 *.tar
 .idea/*
 __pycache__/*
+pycocotools/*
