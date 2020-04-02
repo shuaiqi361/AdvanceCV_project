@@ -106,7 +106,8 @@ class SoftConstraintsLoss(nn.Module):
             l1 = x - 0.5 * self.beta
             l2 = 0.5 * x ** 2 / self.beta
             l1_loss = torch.where(x >= self.beta, l1, l2)
-            l1_loss = l1_loss / torch.unsqueeze(weights, dim=1)
+            # l1_loss = l1_loss / torch.unsqueeze(weights, dim=1)
+            l1_loss = l1_loss / weights
 
             if self.reduction == 'mean':
                 return l1_loss.mean()

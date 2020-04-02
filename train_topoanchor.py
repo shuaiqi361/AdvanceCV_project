@@ -73,7 +73,7 @@ def main():
 
     # Move to default device
     model = model.to(device)
-    criterion = RepPointLoss(rep_point_xy=model.rep_points_xy, scale_weights=model.weights).to(device)
+    criterion = RepPointLoss().to(device)
 
     # Custom dataloaders
     train_dataset = PascalVOCDataset(data_folder,
@@ -109,7 +109,7 @@ def main():
         if epoch in decay_lr_at:
             adjust_learning_rate(optimizer, decay_lr_to)
 
-        _, current_mAP = evaluate(test_loader, model)
+        # _, current_mAP = evaluate(test_loader, model)
 
         train(train_loader=train_loader,
               model=model,

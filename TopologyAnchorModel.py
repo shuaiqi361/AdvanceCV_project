@@ -236,10 +236,10 @@ class PredictionConvolutions(nn.Module):
         # 4 prior-boxes implies we use 4 different aspect ratios, etc.
 
         # Localization prediction convolutions: initial reppoint locations
-        self.loc_conv4_3_init = nn.DeformConv2d(512, n_boxes['conv4_3'] * self.n_points * 2, kernel_size=3, padding=1)
-        self.loc_conv7_init = nn.DeformConv2d(1024, n_boxes['conv7'] * self.n_points * 2, kernel_size=3, padding=1)
-        self.loc_conv8_2_init = nn.DeformConv2d(512, n_boxes['conv8_2'] * self.n_points * 2, kernel_size=3, padding=1)
-        self.loc_conv9_2_init = nn.DeformConv2d(256, n_boxes['conv9_2'] * self.n_points * 2, kernel_size=3, padding=1)
+        self.loc_conv4_3_init = DeformConv2d(512, n_boxes['conv4_3'] * self.n_points * 2, kernel_size=3, padding=1)
+        self.loc_conv7_init = DeformConv2d(1024, n_boxes['conv7'] * self.n_points * 2, kernel_size=3, padding=1)
+        self.loc_conv8_2_init = DeformConv2d(512, n_boxes['conv8_2'] * self.n_points * 2, kernel_size=3, padding=1)
+        self.loc_conv9_2_init = DeformConv2d(256, n_boxes['conv9_2'] * self.n_points * 2, kernel_size=3, padding=1)
         self.loc_conv10_2_init = nn.Conv2d(256, n_boxes['conv10_2'] * self.n_points * 2, kernel_size=3, padding=1)
         self.loc_conv11_2_init = nn.Conv2d(256, n_boxes['conv11_2'] * self.n_points * 2, kernel_size=3, padding=1)
 
@@ -783,15 +783,11 @@ class RepPointLoss(nn.Module):
     (2) a confidence loss for the predicted class scores.
     """
 
-    def __init__(self, rep_point_xy, scale_weights, threshold=0.5, neg_pos_ratio=3, alpha=1.0):
+    def __init__(self, threshold=0.5, neg_pos_ratio=3, alpha=1.0):
         super(RepPointLoss, self).__init__()
-        self.rep_point_xy = rep_point_xy
-        self.scale_weights = scale_weights
         self.threshold = threshold
         self.neg_pos_ratio = neg_pos_ratio
         self.alpha = alpha
-        self.init_loss_weight = init_loss_weight
-        self.refine_loss_weight = refine_loss_weight
 
         self.smooth_l1_init = SmoothL1Loss()
         self.smooth_l1_refine = SmoothL1Loss()
@@ -825,8 +821,8 @@ class RepPointLoss(nn.Module):
                predicted_scores.size(1) == predicted_priors.size(1)
 
         true_locs_init = torch.zeros((batch_size, n_priors, 4), dtype=torch.float).to(device)  # (N, 5685, 4)
-        true_width = torch.zeros((batch_size, n_priors, 1), dtype=torch.float).to(device)
-        true_height = torch.zeros((batch_size, n_priors, 1), dtype=torch.float).to(device)
+        true_width = torch.zeros((batch_size, n_priors), dtype=torch.float).to(device)
+        true_height = torch.zeros((batch_size, n_priors), dtype=torch.float).to(device)
         loss_weights_init = torch.zeros((batch_size, n_priors, 1), dtype=torch.float).to(device)
         # true_locs_refine = torch.zeros((batch_size, n_priors, 4), dtype=torch.float).to(device)  # (N, 5685, 4)
         # true_classes_init = torch.zeros((batch_size, n_priors), dtype=torch.long).to(device)  # (N, 5685)
@@ -887,7 +883,7 @@ class RepPointLoss(nn.Module):
             true_locs_init[i] = boxes[i][object_for_each_prior_init]
             true_width[i] = true_locs_init[i][:, 2] - true_locs_init[i][:, 0]
             true_height[i] = true_locs_init[i][:, 3] - true_locs_init[i][:, 1]
-            loss_weights_init[i] = torch.sqrt(true_width[i] * true_height[i])
+            loss_weights_init[i] = torch.sqrt(true_width[i] * true_height[i]).unsqueeze(1)
             # true_locs_refine[i] = boxes[i][object_for_each_prior_init]
 
         # Identify priors that are positive (object/non-background)
