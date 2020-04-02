@@ -511,10 +511,10 @@ class SSD300RepPoint(nn.Module):
         # print('479:', (locs_init + self.rep_points_xy + locs_refine).size())
         # init_out = locs_init + self.rep_points_xy
         # print('reppoint initial size:', self.rep_points_xy.size())
-        prior_out = self.rep_points_xy.unsqueeze(dim=0).repeat(batch_size, 1, 1)
+        prior_out = self.rep_points_xy.unsqueeze(dim=0).repeat(batch_size, 1, 1).detach()
         # print(prior_out.size(), locs_init.size())
-        init_out = prior_out + locs_init
-        final_out = init_out + locs_refine
+        init_out = prior_out + locs_init.detach()
+        final_out = init_out.detach() + locs_refine
         return self.rep2bbox(prior_out), self.rep2bbox(init_out), \
                self.rep2bbox(final_out), classes_scores, final_out
 
@@ -800,7 +800,7 @@ class RepPointLoss(nn.Module):
     (2) a confidence loss for the predicted class scores.
     """
 
-    def __init__(self, rep_point_xy, scale_weights, threshold=0.5, neg_pos_ratio=3, alpha=2.0, init_loss_weight=0.5,
+    def __init__(self, rep_point_xy, scale_weights, threshold=0.5, neg_pos_ratio=3, alpha=1.0, init_loss_weight=0.5,
                  refine_loss_weight=1.):
         super(RepPointLoss, self).__init__()
         self.rep_point_xy = rep_point_xy
