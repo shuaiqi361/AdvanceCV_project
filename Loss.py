@@ -37,7 +37,7 @@ class FocalLoss(nn.Module):
         pred = pred_logits.sigmoid()
         ce = F.binary_cross_entropy_with_logits(pred_logits, target, reduction='none')
         alpha = target * self.alpha + (1. - target) * (1. - self.alpha)
-        pt = torch.where(target == 1,  pred, 1 - pred)
+        pt = torch.where(target == 1, pred, 1 - pred)
         focal_loss = alpha * (1. - pt) ** self.gamma * ce
         if self.reduction == 'mean':
             return focal_loss.mean()
@@ -46,10 +46,11 @@ class FocalLoss(nn.Module):
         else:
             return focal_loss
 
+
 class SmoothL1Loss(nn.Module):
     'Smooth L1 Loss'
 
-    def __init__(self, beta=1.0/9.0, reduction='mean'):
+    def __init__(self, beta=1.0 / 9.0, reduction='mean'):
         super().__init__()
         self.beta = beta
         self.reduction = reduction

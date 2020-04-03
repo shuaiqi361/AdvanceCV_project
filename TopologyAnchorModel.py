@@ -501,7 +501,7 @@ class SSD300RepPoint(nn.Module):
         # print('reppoint initial size:', self.rep_points_xy.size())
         prior_out = self.rep_points_xy.unsqueeze(dim=0).repeat(batch_size, 1, 1)
 
-        return self.rep2bbox(prior_out), self.rep2bbox(locs_init.clamp_(0, 1)), classes_scores, locs_init.clamp_(0, 1)
+        return self.rep2bbox(prior_out), self.rep2bbox(locs_init), classes_scores, locs_init
 
     def create_rep_points(self):
         """
@@ -620,7 +620,7 @@ class SSD300RepPoint(nn.Module):
             else:
                 raise NotImplementedError
 
-            return bbox.clamp_(0, 1)
+            return bbox
 
         # else size ([batchsize, 5685, 18])
         # print(predicted_locs.size(), len(predicted_locs.size()))
@@ -652,7 +652,7 @@ class SSD300RepPoint(nn.Module):
         else:
             raise NotImplementedError
 
-        return bbox.clamp_(0, 1)
+        return bbox
 
     def detect_objects(self, predicted_locs, predicted_scores, rep_points, min_score, max_overlap, top_k):
         """
