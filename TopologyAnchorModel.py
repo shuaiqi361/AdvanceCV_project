@@ -789,8 +789,9 @@ class RepPointLoss(nn.Module):
         self.neg_pos_ratio = neg_pos_ratio
         self.alpha = alpha
 
-        self.smooth_l1_init = SmoothL1Loss()
-        self.smooth_l1_refine = SmoothL1Loss()
+        # self.smooth_l1_init = SmoothL1Loss()
+        self.smooth_l1_init = nn.SmoothL1Loss()
+        # self.smooth_l1_refine = SmoothL1Loss()
         self.cross_entropy = nn.CrossEntropyLoss(reduce=False)
 
     def increase_threshold(self, increment=0.1):
@@ -893,11 +894,11 @@ class RepPointLoss(nn.Module):
         # LOCALIZATION LOSS
 
         # Localization loss is computed only over positive (non-background) priors
-        # print(loss_weights_init[positive_priors_init].size(), predicted_bbox_init[positive_priors_init].size())
-        # print(loss_weights_init.size(), loss_weights_refine.size())
         loc_loss_init = self.smooth_l1_init(predicted_bbox_init[positive_priors_init],
-                                            true_locs_init[positive_priors_init],
-                                            loss_weights_init[positive_priors_init])
+                                            true_locs_init[positive_priors_init])
+        # loc_loss_init = self.smooth_l1_init(predicted_bbox_init[positive_priors_init],
+        #                                     true_locs_init[positive_priors_init],
+        #                                     loss_weights_init[positive_priors_init])
         # loc_loss_refine = self.smooth_l1_refine(predicted_bbox_refine[positive_priors_init],
         #                                         true_locs_init[positive_priors_init],
         #                                         loss_weights_init[positive_priors_init])
