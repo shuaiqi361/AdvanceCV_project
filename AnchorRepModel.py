@@ -332,7 +332,7 @@ class SSD300(nn.Module):
         self.n_classes = n_classes
         self.n_points = 9
         self.base = VGGBase()
-        self.disable_parameter_requires_grad(self.base)
+        # self.disable_parameter_requires_grad(self.base)
         self.aux_convs = AuxiliaryConvolutions()
         self.pred_convs = PredictionConvolutions(n_classes)
 
@@ -464,7 +464,6 @@ class SSD300(nn.Module):
         n_priors = self.priors_cxcy.size(0)
         # print(n_priors, predicted_locs.size(), predicted_scores.size())
         predicted_scores = F.softmax(predicted_scores, dim=2)  # (N, 5685, n_classes)
-        decoded_locs = predicted_locs  # convert reppoints to bounding boxes
 
         # Lists to store final predicted boxes, labels, and scores for all images
         all_images_boxes = list()
@@ -481,6 +480,8 @@ class SSD300(nn.Module):
             image_scores = list()
             image_points = list()
 
+            decoded_locs = cxcy_to_xy(predicted_locs[i])  # convert reppoints to bounding boxes
+
             # Check for each class
             for c in range(1, self.n_classes):
                 # Keep only predicted boxes and scores where scores for this class are above the minimum score
@@ -496,7 +497,7 @@ class SSD300(nn.Module):
                 class_scores = class_scores[torch.nonzero(score_above_min_score)].squeeze(
                     dim=1)  # (n_qualified), n_min_score <= 5685
 
-                class_decoded_locs = decoded_locs[i][torch.nonzero(score_above_min_score)].squeeze(
+                class_decoded_locs = decoded_locs[torch.nonzero(score_above_min_score)].squeeze(
                     dim=1)  # (n_qualified, 4)
                 class_rep_points = rep_points[i][torch.nonzero(score_above_min_score)].squeeze(dim=1)
 
