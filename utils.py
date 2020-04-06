@@ -289,15 +289,39 @@ def xy_to_cxcy(xy):
                       xy[:, 2:] - xy[:, :2]], 1)  # w, h
 
 
+def xy_to_cxcy_shape(xy):
+    """
+    Convert bounding boxes from boundary coordinates (x_min, y_min, x_max, y_max) to center-size coordinates
+    (x_min, y_min, x_max, y_max, c_x, c_y, w, h), this is augmented for key points approach
+
+    :param xy: bounding boxes in boundary coordinates, a tensor of size (n_boxes, 4)
+    :return: bounding boxes in center-size coordinates, a tensor of size (n_boxes, 4)
+    """
+    return torch.cat([xy, (xy[:, 2:] + xy[:, :2]) / 2,  # x_min, y_min, x_max, y_max, c_x, c_y
+                      xy[:, 2:] - xy[:, :2]], 1)  # w, h
+
+
 def cxcy_to_xy(cxcy):
     """
-    Convert bounding boxes from center-size coordinates (c_x, c_y, w, h) to boundary coordinates (x_min, y_min, x_max, y_max).
+    Convert bounding boxes from center-size coordinates (c_x, c_y, w, h) to boundary coordinates
+    (x_min, y_min, x_max, y_max).
 
     :param cxcy: bounding boxes in center-size coordinates, a tensor of size (n_boxes, 4)
     :return: bounding boxes in boundary coordinates, a tensor of size (n_boxes, 4)
     """
     return torch.cat([cxcy[:, :2] - (cxcy[:, 2:] / 2),  # x_min, y_min
                       cxcy[:, :2] + (cxcy[:, 2:] / 2)], 1)  # x_max, y_max
+
+
+def cxcy_to_xy_shape(cxcy):
+    """
+    Convert bounding boxes from center-size coordinates (x_min, y_min, x_max, y_max, c_x, c_y, w, h) to boundary coordinates (x_min, y_min, x_max, y_max).
+
+    :param cxcy: bounding boxes in center-size coordinates, a tensor of size (n_boxes, 4)
+    :return: bounding boxes in boundary coordinates, a tensor of size (n_boxes, 4)
+    """
+    return torch.cat([(cxcy[:, 4:6] - (cxcy[:, 6:] / 2) + cxcy[:, 0:2]) / 2,  # x_min, y_min
+                      (cxcy[:, 4:6] + (cxcy[:, 6:] / 2) + cxcy[:, 2:4]) / 2], 1)  # x_max, y_max
 
 
 def cxcy_to_gcxgcy(cxcy, priors_cxcy):
@@ -321,6 +345,34 @@ def cxcy_to_gcxgcy(cxcy, priors_cxcy):
                       torch.log(cxcy[:, 2:] / priors_cxcy[:, 2:]) * 5], 1)  # g_w, g_h
 
 
+def cxcy_to_gcxgcy_shape(cxcy, priors_cxcy):
+    """
+    Encode bounding boxes (that are in center-size form) w.r.t. the corresponding prior boxes
+    (that are in center-size form) (x_min, y_min, x_max, y_max, c_x, c_y, w, h)
+
+    For the center coordinates, find the offset with respect to the prior box, and scale by the size of the prior box.
+    For the size coordinates, scale by the size of the prior box, and convert to the log-space.
+
+    In the model, we are predicting bounding box coordinates in this encoded form.
+
+    :param cxcy: bounding boxes in center-size coordinates, a tensor of size (n_priors, 4)
+    :param priors_cxcy: prior boxes with respect to which the encoding must be performed, a tensor of size (n_priors, 4)
+    :return: encoded bounding boxes, a tensor of size (n_priors, 8)
+    """
+
+    # The 10 and 5 below are referred to as 'variances' in the original Caffe repo, completely empirical
+    # They are for some sort of numerical conditioning, for 'scaling the localization gradient'
+    # See https://github.com/weiliu89/caffe/issues/155
+    prior_min_max_cxcy = torch.cat([priors_cxcy[:, 0:2] - (priors_cxcy[:, 2:] / 2),
+                                    priors_cxcy[:, 0:2] + (priors_cxcy[:, 2:] / 2),
+                                    priors_cxcy], 1)  # a tensor of size (n_priors, 8)
+
+    return torch.cat([(cxcy[:, :-2] - prior_min_max_cxcy[:, :-2]) / (
+                priors_cxcy[:, -2:].repeat_interleave((cxcy.size(1) - 2) // 2) / 10),
+                      # (gx_min, gy_min, gx_max, gy_max, gc_x, gc_y, gw, gh)
+                      torch.log(cxcy[:, -2:] / prior_min_max_cxcy[:, -2:]) * 5], 1)  # g_w, g_h
+
+
 def gcxgcy_to_cxcy(gcxgcy, priors_cxcy):
     """
     Decode bounding box coordinates predicted by the model, since they are encoded in the form mentioned above.
@@ -336,6 +388,49 @@ def gcxgcy_to_cxcy(gcxgcy, priors_cxcy):
 
     return torch.cat([gcxgcy[:, :2] * priors_cxcy[:, 2:] / 10 + priors_cxcy[:, :2],  # c_x, c_y
                       torch.exp(gcxgcy[:, 2:] / 5) * priors_cxcy[:, 2:]], 1)  # w, h
+
+
+def gcxgcy_to_cxcy_shape(gcxgcy, priors_cxcy):
+    """
+    Decode bounding box coordinates predicted by the model, since they are encoded in the form mentioned above.
+
+    They are decoded into center-size coordinates.
+
+    This is the inverse of the function above.
+
+    :param gcxgcy: encoded bounding boxes, i.e. output of the model, a tensor of size (n_priors, 8)
+    :param priors_cxcy: prior boxes with respect to which the encoding is defined, a tensor of size (n_priors, 8)
+    :return: decoded bounding boxes in center-size form, a tensor of size (n_priors, 8)
+    (x_min, y_min, x_max, y_max, c_x, c_y, w, h)
+    """
+    prior_min_max_cxcy = torch.cat([priors_cxcy[:, 0:2] - (priors_cxcy[:, 2:] / 2),
+                                    priors_cxcy[:, 0:2] + (priors_cxcy[:, 2:] / 2),
+                                    priors_cxcy], 1)  # a tensor of size (n_priors, 8)
+
+    return torch.cat([gcxgcy[:, :-2] * prior_min_max_cxcy[:, -2:].repeat_interleave(
+        (gcxgcy.size(1) - 2) // 2) / 10 + prior_min_max_cxcy[:, :-2],  # c_x, c_y
+                      torch.exp(gcxgcy[:, -2:] / 5) * prior_min_max_cxcy[:, -2:]], 1)  # w, h
+
+
+def gcxgcy_to_rep(gcxgcy, priors_cxcy):
+    """
+    Decode bounding box coordinates predicted by the model, since they are encoded in the form mentioned above.
+
+    They are decoded into center-size coordinates.
+
+    This is the inverse of the function above.
+
+    :param gcxgcy: encoded bounding boxes, i.e. output of the model, a tensor of size (n_priors, 8)
+    :param priors_cxcy: prior boxes with respect to which the encoding is defined, a tensor of size (n_priors, 8)
+    :return: decoded bounding boxes in center-size form, a tensor of size (n_priors, 8)
+    (x_min, y_min, x_max, y_max, c_x, c_y, w, h)
+    """
+    prior_min_max_cxcy = torch.cat([priors_cxcy[:, 0:2] - (priors_cxcy[:, 2:] / 2),
+                                    priors_cxcy[:, 0:2] + (priors_cxcy[:, 2:] / 2),
+                                    priors_cxcy], 1)  # a tensor of size (n_priors, 8)
+
+    return torch.cat([gcxgcy[:, :-2] * prior_min_max_cxcy[:, -2:].repeat_interleave((gcxgcy.size(1) - 2) // 2) / 10 +
+                      prior_min_max_cxcy[:, :-2]], 1)
 
 
 def find_intersection(set_1, set_2):

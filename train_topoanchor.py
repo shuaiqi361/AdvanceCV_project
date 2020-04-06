@@ -3,7 +3,7 @@ import torch.backends.cudnn as cudnn
 import torch.optim
 import torch.utils.data
 # from rep_model import SSD300RepPoint, RepPointLoss
-from TopologyAnchorModel import SSD300RepPoint, RepPointLoss
+from TopologyAnchorModel import SSD300, MultiBoxLoss
 from datasets import PascalVOCDataset
 from utils import *
 from tqdm import tqdm
@@ -15,7 +15,7 @@ pp = PrettyPrinter()
 
 # Data parameters
 data_folder = 'data'  # folder with data files
-f_log = open('log/rep_train_topoanchor_log.txt', 'w')
+f_log = open('log/rep_train_topo_anchor_log.txt', 'w')
 keep_difficult = True  # use objects considered difficult to detect?
 
 # Model parameters
@@ -51,7 +51,7 @@ def main():
     # Initialize model or load checkpoint
     if checkpoint is None:
         start_epoch = 0
-        model = SSD300RepPoint(n_classes=n_classes, center_init=False, transform_method='min-max')
+        model = SSD300(n_classes=n_classes)
         # Initialize the optimizer, with twice the default learning rate for biases, as in the original Caffe repo
         biases = list()
         not_biases = list()
@@ -73,7 +73,7 @@ def main():
 
     # Move to default device
     model = model.to(device)
-    criterion = RepPointLoss().to(device)
+    criterion = MultiBoxLoss(model.priors_cxcy).to(device)
 
     # Custom dataloaders
     train_dataset = PascalVOCDataset(data_folder,
@@ -118,10 +118,10 @@ def main():
               epoch=epoch)
 
         # Save checkpoint
-        if epoch >= 30 and epoch % 30 == 0:
+        if epoch >= 30 and epoch % 30 == 0 or epoch == 10:
             _, current_mAP = evaluate(test_loader, model)
             if current_mAP > best_mAP:
-                save_checkpoint(epoch, model, optimizer, name='checkpoints/my_checkpoint_topoanchor_b32.pth.tar')
+                save_checkpoint(epoch, model, optimizer, name='checkpoints/my_checkpoint_topo_anchor_b32.pth.tar')
                 best_mAP = current_mAP
                 # criterion.increase_threshold(0.05)
         # elif epoch == 50:
@@ -129,7 +129,7 @@ def main():
 
     _, current_mAP = evaluate(test_loader, model)
     if current_mAP > best_mAP:
-        save_checkpoint(epoch, model, optimizer, name='checkpoints/my_checkpoint_topoanchor_b32.pth.tar')
+        save_checkpoint(epoch, model, optimizer, name='checkpoints/my_checkpoint_topo_anchor_b32.pth.tar')
         best_mAP = current_mAP
 
 
