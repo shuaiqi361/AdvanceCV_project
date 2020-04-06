@@ -205,6 +205,7 @@ class PredictionConvolutions(nn.Module):
         super(PredictionConvolutions, self).__init__()
 
         self.n_classes = n_classes
+        self.n_points = n_points
 
         # Number of prior-boxes we are considering per position in each feature map
         n_boxes = {'conv4_3': 4,
@@ -262,27 +263,27 @@ class PredictionConvolutions(nn.Module):
         l_conv4_3 = l_conv4_3.permute(0, 2, 3,
                                       1).contiguous()  # (N, 38, 38, 16), to match prior-box order (after .view())
         # (.contiguous() ensures it is stored in a contiguous chunk of memory, needed for .view() below)
-        l_conv4_3 = l_conv4_3.view(batch_size, -1, 4)  # (N, 5776, 4), there are a total 5776 boxes on this feature map
+        l_conv4_3 = l_conv4_3.view(batch_size, -1, (self.n_points * 2 + 2))  # (N, 5776, 4), there are a total 5776 boxes on this feature map
 
         l_conv7 = self.loc_conv7(conv7_feats)  # (N, 24, 19, 19)
         l_conv7 = l_conv7.permute(0, 2, 3, 1).contiguous()  # (N, 19, 19, 24)
-        l_conv7 = l_conv7.view(batch_size, -1, 4)  # (N, 2166, 4), there are a total 2116 boxes on this feature map
+        l_conv7 = l_conv7.view(batch_size, -1, (self.n_points * 2 + 2))  # (N, 2166, 4), there are a total 2116 boxes on this feature map
 
         l_conv8_2 = self.loc_conv8_2(conv8_2_feats)  # (N, 24, 10, 10)
         l_conv8_2 = l_conv8_2.permute(0, 2, 3, 1).contiguous()  # (N, 10, 10, 24)
-        l_conv8_2 = l_conv8_2.view(batch_size, -1, 4)  # (N, 600, 4)
+        l_conv8_2 = l_conv8_2.view(batch_size, -1, (self.n_points * 2 + 2))  # (N, 600, 4)
 
         l_conv9_2 = self.loc_conv9_2(conv9_2_feats)  # (N, 24, 5, 5)
         l_conv9_2 = l_conv9_2.permute(0, 2, 3, 1).contiguous()  # (N, 5, 5, 24)
-        l_conv9_2 = l_conv9_2.view(batch_size, -1, 4)  # (N, 150, 4)
+        l_conv9_2 = l_conv9_2.view(batch_size, -1, (self.n_points * 2 + 2))  # (N, 150, 4)
 
         l_conv10_2 = self.loc_conv10_2(conv10_2_feats)  # (N, 16, 3, 3)
         l_conv10_2 = l_conv10_2.permute(0, 2, 3, 1).contiguous()  # (N, 3, 3, 16)
-        l_conv10_2 = l_conv10_2.view(batch_size, -1, 4)  # (N, 36, 4)
+        l_conv10_2 = l_conv10_2.view(batch_size, -1, (self.n_points * 2 + 2))  # (N, 36, 4)
 
         l_conv11_2 = self.loc_conv11_2(conv11_2_feats)  # (N, 16, 1, 1)
         l_conv11_2 = l_conv11_2.permute(0, 2, 3, 1).contiguous()  # (N, 1, 1, 16)
-        l_conv11_2 = l_conv11_2.view(batch_size, -1, 4)  # (N, 4, 4)
+        l_conv11_2 = l_conv11_2.view(batch_size, -1, (self.n_points * 2 + 2))  # (N, 4, 4)
 
         # Predict classes in localization boxes
         c_conv4_3 = self.cl_conv4_3(conv4_3_feats)  # (N, 4 * n_classes, 38, 38)
@@ -373,6 +374,7 @@ class SSD300(nn.Module):
                                                conv11_2_feats)  # (N, 8732, 4), (N, 8732, n_classes)
 
         box_rep = self.rep2gbbox(locs)
+
         real_points = torch.zeros((batch_size, locs.size(1), self.n_points * 2), dtype=torch.float).to(device)
         for i in range(batch_size):
             real_points[i] = gcxgcy_to_rep(locs[i], self.priors_cxcy)
@@ -436,7 +438,7 @@ class SSD300(nn.Module):
 
     def rep2gbbox(self, predicted_locs):
         # generate batchsize, n_priors, 8
-        points_reshape = predicted_locs.view(predicted_locs.size(0), -1, 2, self.n_points)
+        points_reshape = predicted_locs.view(predicted_locs.size(0), -1, 2, self.n_points + 1)
         pts_x = points_reshape[:, :, 0, :-1]  # last column is w, h
         pts_y = points_reshape[:, :, 1, :-1]
 
@@ -446,8 +448,9 @@ class SSD300(nn.Module):
         bbox_bottom_gy = pts_y.max(dim=2, keepdim=True)[0]
         pts_gx_mean = pts_x.mean(dim=2, keepdim=True)
         pts_gy_mean = pts_x.mean(dim=2, keepdim=True)
-        bbox_g_width = points_reshape[:, :, 0, -1]
-        bbox_g_height = points_reshape[:, :, 1, -1]
+        bbox_g_width = points_reshape[:, :, 0, -1].unsqueeze(2)
+        bbox_g_height = points_reshape[:, :, 1, -1].unsqueeze(2)
+        # print(bbox_left_gx.size(), pts_gx_mean.size(), bbox_g_width.size())
         bbox = torch.cat([bbox_left_gx, bbox_top_gy, bbox_right_gx, bbox_bottom_gy,
                           pts_gx_mean, pts_gy_mean, bbox_g_width, bbox_g_height], dim=2)
 
@@ -479,6 +482,7 @@ class SSD300(nn.Module):
         all_images_scores = list()
         all_image_points = list()
 
+        # print(n_priors, predicted_locs.size(), predicted_scores.size())
         assert n_priors == predicted_locs.size(1) == predicted_scores.size(1)
 
         for i in range(batch_size):
@@ -618,7 +622,7 @@ class MultiBoxLoss(nn.Module):
         # print('Should be equal: ', n_priors, predicted_locs.size(1), predicted_scores.size(1))
         assert n_priors == predicted_locs.size(1) == predicted_scores.size(1)
 
-        true_locs = torch.zeros((batch_size, n_priors, 4), dtype=torch.float).to(device)  # (N, 8732, 4)
+        true_locs = torch.zeros((batch_size, n_priors, 8), dtype=torch.float).to(device)  # (N, 8732, 4)
         true_classes = torch.zeros((batch_size, n_priors), dtype=torch.long).to(device)  # (N, 8732)
 
         # For each image

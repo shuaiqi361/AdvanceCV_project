@@ -368,7 +368,7 @@ def cxcy_to_gcxgcy_shape(cxcy, priors_cxcy):
                                     priors_cxcy], 1)  # a tensor of size (n_priors, 8)
 
     return torch.cat([(cxcy[:, :-2] - prior_min_max_cxcy[:, :-2]) / (
-                priors_cxcy[:, -2:].repeat_interleave((cxcy.size(1) - 2) // 2) / 10),
+                priors_cxcy[:, -2:].repeat(1, (cxcy.size(1) - 2) // 2) / 10),
                       # (gx_min, gy_min, gx_max, gy_max, gc_x, gc_y, gw, gh)
                       torch.log(cxcy[:, -2:] / prior_min_max_cxcy[:, -2:]) * 5], 1)  # g_w, g_h
 
@@ -407,8 +407,8 @@ def gcxgcy_to_cxcy_shape(gcxgcy, priors_cxcy):
                                     priors_cxcy[:, 0:2] + (priors_cxcy[:, 2:] / 2),
                                     priors_cxcy], 1)  # a tensor of size (n_priors, 8)
 
-    return torch.cat([gcxgcy[:, :-2] * prior_min_max_cxcy[:, -2:].repeat_interleave(
-        (gcxgcy.size(1) - 2) // 2) / 10 + prior_min_max_cxcy[:, :-2],  # c_x, c_y
+    return torch.cat([gcxgcy[:, :-2] * prior_min_max_cxcy[:, -2:].repeat(1, (gcxgcy.size(1) - 2) // 2) / 10
+                      + priors_cxcy[:, :2].repeat(1, (gcxgcy.size(1) - 2) // 2),  # c_x, c_y
                       torch.exp(gcxgcy[:, -2:] / 5) * prior_min_max_cxcy[:, -2:]], 1)  # w, h
 
 
@@ -429,8 +429,8 @@ def gcxgcy_to_rep(gcxgcy, priors_cxcy):
                                     priors_cxcy[:, 0:2] + (priors_cxcy[:, 2:] / 2),
                                     priors_cxcy], 1)  # a tensor of size (n_priors, 8)
 
-    return torch.cat([gcxgcy[:, :-2] * prior_min_max_cxcy[:, -2:].repeat_interleave((gcxgcy.size(1) - 2) // 2) / 10 +
-                      prior_min_max_cxcy[:, :-2]], 1)
+    return gcxgcy[:, :-2] * prior_min_max_cxcy[:, -2:].repeat(1, (gcxgcy.size(1) - 2) // 2) / 10 \
+           + priors_cxcy[:, :2].repeat(1, (gcxgcy.size(1) - 2) // 2)
 
 
 def find_intersection(set_1, set_2):
