@@ -337,7 +337,7 @@ class SSD300(nn.Module):
         self.base = VGGBase()
         # self.disable_parameter_requires_grad(self.base)
         self.aux_convs = AuxiliaryConvolutions()
-        self.pred_convs = PredictionConvolutions(n_classes)
+        self.pred_convs = PredictionConvolutions(n_classes, self.n_points)
 
         # Since lower level features (conv4_3_feats) have considerably larger scales, we take the L2 norm and rescale
         # Rescale factor is initially set at 20, but is learned for each channel during back-prop

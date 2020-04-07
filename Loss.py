@@ -72,10 +72,11 @@ class IouLoss(nn.Module):
         self.variances = variances
         self.loss = losstype
 
-    def forward(self, loc_p, loc_t, prior_data):
+    def forward(self, loc_p, loc_t, prior_data=None):
         num = loc_p.shape[0]
 
         if self.pred_mode == 'Center':
+            assert prior_data is not None
             decoded_boxes = decode(loc_p, prior_data, self.variances)
         else:
             decoded_boxes = loc_p
