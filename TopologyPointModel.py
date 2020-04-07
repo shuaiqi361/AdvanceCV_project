@@ -449,8 +449,8 @@ class SSD300(nn.Module):
         bbox_right = pts_x.max(dim=1, keepdim=True)[0]
         bbox_top = pts_y.min(dim=1, keepdim=True)[0]
         bbox_bottom = pts_y.max(dim=1, keepdim=True)[0]
-        width = (bbox_right - bbox_left).clamp_(0, 1)
-        height = (bbox_top - bbox_bottom).clamp_(0, 1)
+        width = (bbox_right - bbox_left).clamp_(0.001, 0.99)
+        height = (bbox_top - bbox_bottom).clamp_(0.001, 0.99)
 
         pts_gx_mean = points_reshape[:, 0, :].mean(dim=1, keepdim=True)
         pts_gy_mean = points_reshape[:, 1, :].mean(dim=1, keepdim=True)

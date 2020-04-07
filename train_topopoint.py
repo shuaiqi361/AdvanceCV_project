@@ -14,7 +14,7 @@ import numpy as np
 pp = PrettyPrinter()
 
 # Data parameters
-data_folder = 'data/VOC'  # folder with data files
+data_folder = 'data'  # folder with data files
 f_log = open('log/rep_train_topo_point_log.txt', 'w')
 keep_difficult = True  # use objects considered difficult to detect?
 
