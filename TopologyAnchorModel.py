@@ -625,7 +625,7 @@ class MultiBoxLoss(nn.Module):
         # print('Should be equal: ', n_priors, predicted_locs.size(1), predicted_scores.size(1))
         assert n_priors == predicted_locs.size(1) == predicted_scores.size(1)
 
-        true_locs = torch.zeros((batch_size, n_priors, 8), dtype=torch.float).to(device)  # (N, 8732, 4)
+        true_locs = torch.zeros((batch_size, n_priors, 4), dtype=torch.float).to(device)  # (N, 8732, 4)
         true_classes = torch.zeros((batch_size, n_priors), dtype=torch.long).to(device)  # (N, 8732)
 
         # For each image
