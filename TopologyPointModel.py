@@ -449,13 +449,13 @@ class SSD300(nn.Module):
         bbox_right = pts_x.max(dim=1, keepdim=True)[0]
         bbox_top = pts_y.min(dim=1, keepdim=True)[0]
         bbox_bottom = pts_y.max(dim=1, keepdim=True)[0]
-        width = bbox_right - bbox_left
-        height = bbox_top - bbox_bottom
+        width = torch.abs(bbox_right - bbox_left)
+        height = torch.abs(bbox_top - bbox_bottom)
 
         pts_gx_mean = points_reshape[:, 0, :].mean(dim=1, keepdim=True)
         pts_gy_mean = points_reshape[:, 1, :].mean(dim=1, keepdim=True)
-        gw = torch.log(width / priors_cxcy[:, 2].unsqueeze(-1)) * 5
-        gh = torch.log(height / priors_cxcy[:, 3].unsqueeze(-1)) * 5
+        gw = torch.log(width / priors_cxcy[:, 2].unsqueeze(-1) + 1e-3) * 5
+        gh = torch.log(height / priors_cxcy[:, 3].unsqueeze(-1) + 1e-3) * 5
 
         # print(bbox_left_gx.size(), pts_gx_mean.size(), bbox_g_width.size())
         # bbox = torch.cat([bbox_left_gx, bbox_top_gy, bbox_right_gx, bbox_bottom_gy,
@@ -463,7 +463,7 @@ class SSD300(nn.Module):
         #                   points_reshape[:, :, 1, -1].unsqueeze(2)], dim=2)
         bbox = torch.cat([pts_gx_mean, pts_gy_mean, gw, gh], dim=1)
 
-        return bbox.clamp_(1e-6, 1)
+        return bbox.clamp_(0, 1)
 
     def detect_objects(self, predicted_locs, predicted_scores, rep_points, min_score, max_overlap, top_k):
         """
@@ -511,7 +511,8 @@ class SSD300(nn.Module):
                 # Keep only predicted boxes and scores where scores for this class are above the minimum score
                 class_scores = predicted_scores[i][:, c]  # (5685)
 
-                score_above_min_score = (class_scores > min_score) * 1  # torch.uint8 (byte) tensor, for indexing
+                score_above_min_score = (class_scores > min_score).long()  # torch.uint8 (byte) tensor, for indexing
+
                 n_above_min_score = torch.sum(score_above_min_score).item()
 
                 if n_above_min_score == 0:
@@ -548,7 +549,7 @@ class SSD300(nn.Module):
 
                     # Suppress boxes whose overlaps (with this box) are greater than maximum overlap
                     # Find such boxes and update suppress indices
-                    suppress = torch.max(suppress, (overlap[box] > max_overlap) * 1)
+                    suppress = torch.max(suppress, (overlap[box] > max_overlap).long())
                     # The max operation retains previously suppressed boxes, like an 'OR' operation
 
                     # Don't suppress this box, even though it has an overlap of 1 with itself
