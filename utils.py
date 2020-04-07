@@ -4,6 +4,7 @@ import torch
 import random
 import xml.etree.ElementTree as ET
 import torchvision.transforms.functional as FT
+import numpy as np
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # device = 'cpu'
@@ -428,12 +429,12 @@ def gcxgcy_to_rep(gcxgcy, priors_cxcy):
     :return: decoded bounding boxes in center-size form, a tensor of size (n_priors, 8)
     (x_min, y_min, x_max, y_max, c_x, c_y, w, h)
     """
-    prior_min_max_cxcy = torch.cat([priors_cxcy[:, 0:2] - (priors_cxcy[:, 2:] / 2),
-                                    priors_cxcy[:, 0:2] + (priors_cxcy[:, 2:] / 2),
-                                    priors_cxcy], 1)  # a tensor of size (n_priors, 8)
+    # prior_min_max_cxcy = torch.cat([priors_cxcy[:, 0:2] - (priors_cxcy[:, 2:] / 2),
+    #                                 priors_cxcy[:, 0:2] + (priors_cxcy[:, 2:] / 2),
+    #                                 priors_cxcy], 1)  # a tensor of size (n_priors, 8)
 
-    return (gcxgcy[:, :-2] * prior_min_max_cxcy[:, -2:].repeat(1, (gcxgcy.size(1) - 2) // 2) / 10 \
-            + priors_cxcy[:, :2].repeat(1, (gcxgcy.size(1) - 2) // 2))
+    return (gcxgcy * priors_cxcy[:, -2:].repeat(1, gcxgcy.size(1) // 2) / 10 \
+            + priors_cxcy[:, :2].repeat(1, gcxgcy.size(1) // 2))
 
 
 def find_intersection(set_1, set_2):
@@ -809,7 +810,7 @@ class AverageMeter(object):
         self.avg = self.sum / self.count
 
 
-def clip_gradient(optimizer, grad_clip):
+def clip_gradient_threshold(optimizer, grad_clip):
     """
     Clips gradients computed during backpropagation to avoid explosion of gradients.
 
@@ -820,3 +821,18 @@ def clip_gradient(optimizer, grad_clip):
         for param in group['params']:
             if param.grad is not None:
                 param.grad.data.clamp_(-grad_clip, grad_clip)
+
+
+def clip_gradient_norm(model, clip_norm):
+    """Computes a gradient clipping coefficient based on gradient norm."""
+    totalnorm = 0
+    for p in model.parameters():
+        if p.requires_grad:
+            modulenorm = p.grad.data.norm()
+            totalnorm += modulenorm ** 2
+    totalnorm = np.sqrt(totalnorm)
+
+    norm = clip_norm / max(totalnorm, clip_norm)
+    for p in model.parameters():
+        if p.requires_grad:
+            p.grad.mul_(norm)
