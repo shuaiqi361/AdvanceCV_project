@@ -138,10 +138,10 @@ class AuxiliaryConvolutions(nn.Module):
 
         # Auxiliary/additional convolutions on top of the VGG base
         self.conv8_1 = nn.Conv2d(1024, 256, kernel_size=1, padding=0)  # stride = 1, by default
-        self.conv8_2 = nn.Conv2d(256, 512, kernel_size=3, stride=2, padding=1)  # dim. reduction because stride > 1
+        self.conv8_2 = DeformConv2d(256, 512, kernel_size=3, stride=2, padding=1)  # dim. reduction because stride > 1
 
         self.conv9_1 = nn.Conv2d(512, 128, kernel_size=1, padding=0)
-        self.conv9_2 = nn.Conv2d(128, 256, kernel_size=3, stride=2, padding=1)  # dim. reduction because stride > 1
+        self.conv9_2 = DeformConv2d(128, 256, kernel_size=3, stride=2, padding=1)  # dim. reduction because stride > 1
 
         self.conv10_1 = nn.Conv2d(256, 128, kernel_size=1, padding=0)
         self.conv10_2 = nn.Conv2d(128, 256, kernel_size=3, padding=0)  # dim. reduction because padding = 0
@@ -217,18 +217,18 @@ class PredictionConvolutions(nn.Module):
         # 4 prior-boxes implies we use 4 different aspect ratios, etc.
 
         # Localization prediction convolutions (predict offsets w.r.t prior-boxes)
-        self.loc_conv4_3 = nn.Conv2d(512, n_boxes['conv4_3'] * (n_points * 2), kernel_size=3, padding=1)
-        self.loc_conv7 = nn.Conv2d(1024, n_boxes['conv7'] * (n_points * 2), kernel_size=3, padding=1)
-        self.loc_conv8_2 = nn.Conv2d(512, n_boxes['conv8_2'] * (n_points * 2), kernel_size=3, padding=1)
-        self.loc_conv9_2 = nn.Conv2d(256, n_boxes['conv9_2'] * (n_points * 2), kernel_size=3, padding=1)
+        self.loc_conv4_3 = DeformConv2d(512, n_boxes['conv4_3'] * (n_points * 2), kernel_size=3, padding=1)
+        self.loc_conv7 = DeformConv2d(1024, n_boxes['conv7'] * (n_points * 2), kernel_size=3, padding=1)
+        self.loc_conv8_2 = DeformConv2d(512, n_boxes['conv8_2'] * (n_points * 2), kernel_size=3, padding=1)
+        self.loc_conv9_2 = DeformConv2d(256, n_boxes['conv9_2'] * (n_points * 2), kernel_size=3, padding=1)
         self.loc_conv10_2 = nn.Conv2d(256, n_boxes['conv10_2'] * (n_points * 2), kernel_size=3, padding=1)
         self.loc_conv11_2 = nn.Conv2d(256, n_boxes['conv11_2'] * (n_points * 2), kernel_size=3, padding=1)
 
         # Class prediction convolutions (predict classes in localization boxes)
-        self.cl_conv4_3 = nn.Conv2d(512, n_boxes['conv4_3'] * n_classes, kernel_size=3, padding=1)
-        self.cl_conv7 = nn.Conv2d(1024, n_boxes['conv7'] * n_classes, kernel_size=3, padding=1)
-        self.cl_conv8_2 = nn.Conv2d(512, n_boxes['conv8_2'] * n_classes, kernel_size=3, padding=1)
-        self.cl_conv9_2 = nn.Conv2d(256, n_boxes['conv9_2'] * n_classes, kernel_size=3, padding=1)
+        self.cl_conv4_3 = DeformConv2d(512, n_boxes['conv4_3'] * n_classes, kernel_size=3, padding=1)
+        self.cl_conv7 = DeformConv2d(1024, n_boxes['conv7'] * n_classes, kernel_size=3, padding=1)
+        self.cl_conv8_2 = DeformConv2d(512, n_boxes['conv8_2'] * n_classes, kernel_size=3, padding=1)
+        self.cl_conv9_2 = DeformConv2d(256, n_boxes['conv9_2'] * n_classes, kernel_size=3, padding=1)
         self.cl_conv10_2 = nn.Conv2d(256, n_boxes['conv10_2'] * n_classes, kernel_size=3, padding=1)
         self.cl_conv11_2 = nn.Conv2d(256, n_boxes['conv11_2'] * n_classes, kernel_size=3, padding=1)
 
@@ -449,8 +449,8 @@ class SSD300(nn.Module):
         bbox_right = pts_x.max(dim=1, keepdim=True)[0]
         bbox_top = pts_y.min(dim=1, keepdim=True)[0]
         bbox_bottom = pts_y.max(dim=1, keepdim=True)[0]
-        width = bbox_right - bbox_left
-        height = bbox_top - bbox_bottom
+        width = (bbox_right - bbox_left).clamp_(0, 1)
+        height = (bbox_top - bbox_bottom).clamp_(0, 1)
 
         pts_gx_mean = points_reshape[:, 0, :].mean(dim=1, keepdim=True)
         pts_gy_mean = points_reshape[:, 1, :].mean(dim=1, keepdim=True)
@@ -463,7 +463,7 @@ class SSD300(nn.Module):
         #                   points_reshape[:, :, 1, -1].unsqueeze(2)], dim=2)
         bbox = torch.cat([pts_gx_mean, pts_gy_mean, gw, gh], dim=1)
 
-        return bbox.clamp_(0, 1)
+        return bbox
 
     def detect_objects(self, predicted_locs, predicted_scores, rep_points, min_score, max_overlap, top_k):
         """
