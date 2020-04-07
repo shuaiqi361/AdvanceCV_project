@@ -449,13 +449,13 @@ class SSD300(nn.Module):
         bbox_right = pts_x.max(dim=1, keepdim=True)[0]
         bbox_top = pts_y.min(dim=1, keepdim=True)[0]
         bbox_bottom = pts_y.max(dim=1, keepdim=True)[0]
-        width = (bbox_right - bbox_left).clamp_(0.001, 0.99)
-        height = (bbox_top - bbox_bottom).clamp_(0.001, 0.99)
+        width = bbox_right - bbox_left
+        height = bbox_top - bbox_bottom
 
         pts_gx_mean = points_reshape[:, 0, :].mean(dim=1, keepdim=True)
         pts_gy_mean = points_reshape[:, 1, :].mean(dim=1, keepdim=True)
-        gw = torch.log(width / priors_cxcy[:, 2].unsqueeze(-1) + 1e-6) * 5
-        gh = torch.log(height / priors_cxcy[:, 3].unsqueeze(-1) + 1e-6) * 5
+        gw = torch.log(width / priors_cxcy[:, 2].unsqueeze(-1)) * 5
+        gh = torch.log(height / priors_cxcy[:, 3].unsqueeze(-1)) * 5
 
         # print(bbox_left_gx.size(), pts_gx_mean.size(), bbox_g_width.size())
         # bbox = torch.cat([bbox_left_gx, bbox_top_gy, bbox_right_gx, bbox_bottom_gy,
@@ -463,7 +463,7 @@ class SSD300(nn.Module):
         #                   points_reshape[:, :, 1, -1].unsqueeze(2)], dim=2)
         bbox = torch.cat([pts_gx_mean, pts_gy_mean, gw, gh], dim=1)
 
-        return bbox
+        return bbox.clamp_(1e-6, 1)
 
     def detect_objects(self, predicted_locs, predicted_scores, rep_points, min_score, max_overlap, top_k):
         """
