@@ -442,17 +442,19 @@ class SSD300(nn.Module):
         pts_x = points_reshape[:, :, 0, :-1]  # last column is w, h
         pts_y = points_reshape[:, :, 1, :-1]
 
-        bbox_left_gx = pts_x.min(dim=2, keepdim=True)[0]
-        bbox_right_gx = pts_x.max(dim=2, keepdim=True)[0]
-        bbox_top_gy = pts_y.min(dim=2, keepdim=True)[0]
-        bbox_bottom_gy = pts_y.max(dim=2, keepdim=True)[0]
+        # bbox_left_gx = pts_x.min(dim=2, keepdim=True)[0]
+        # bbox_right_gx = pts_x.max(dim=2, keepdim=True)[0]
+        # bbox_top_gy = pts_y.min(dim=2, keepdim=True)[0]
+        # bbox_bottom_gy = pts_y.max(dim=2, keepdim=True)[0]
         pts_gx_mean = pts_x.mean(dim=2, keepdim=True)
-        pts_gy_mean = pts_x.mean(dim=2, keepdim=True)
-        bbox_g_width = points_reshape[:, :, 0, -1].unsqueeze(2)
-        bbox_g_height = points_reshape[:, :, 1, -1].unsqueeze(2)
+        pts_gy_mean = pts_y.mean(dim=2, keepdim=True)
+
         # print(bbox_left_gx.size(), pts_gx_mean.size(), bbox_g_width.size())
-        bbox = torch.cat([bbox_left_gx, bbox_top_gy, bbox_right_gx, bbox_bottom_gy,
-                          pts_gx_mean, pts_gy_mean, bbox_g_width, bbox_g_height], dim=2)
+        # bbox = torch.cat([bbox_left_gx, bbox_top_gy, bbox_right_gx, bbox_bottom_gy,
+        #                   pts_gx_mean, pts_gy_mean, points_reshape[:, :, 0, -1].unsqueeze(2),
+        #                   points_reshape[:, :, 1, -1].unsqueeze(2)], dim=2)
+        bbox = torch.cat([pts_gx_mean, pts_gy_mean, points_reshape[:, :, 0, -1].unsqueeze(2),
+                          points_reshape[:, :, 1, -1].unsqueeze(2)], dim=2)
 
         return bbox
 
@@ -492,8 +494,10 @@ class SSD300(nn.Module):
             image_scores = list()
             image_points = list()
 
-            decoded_locs = cxcy_to_xy_shape(
-                gcxgcy_to_cxcy_shape(predicted_locs[i], self.priors_cxcy))  # convert reppoints to bounding boxes
+            # decoded_locs = cxcy_to_xy_shape(
+            #     gcxgcy_to_cxcy_shape(predicted_locs[i], self.priors_cxcy))  # convert reppoints to bounding boxes
+            decoded_locs = cxcy_to_xy(
+                gcxgcy_to_cxcy(predicted_locs[i], self.priors_cxcy))
 
             # Check for each class
             for c in range(1, self.n_classes):
@@ -551,8 +555,7 @@ class SSD300(nn.Module):
             # If no object in any class is found, store a placeholder for 'background'
             if len(image_boxes) == 0:
                 image_boxes.append(torch.FloatTensor([[0., 0., 1., 1.]]).to(device))
-                image_points.append(torch.FloatTensor([[0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5,
-                                                        0.5, 0.5, 0.5, 0.5, 0.5, 0.5]]).to(device))
+                image_points.append(torch.FloatTensor([[0.5 for _ in range(self.n_points * 2)]]).to(device))
                 image_labels.append(torch.LongTensor([0]).to(device))
                 image_scores.append(torch.FloatTensor([0.]).to(device))
 
@@ -659,7 +662,8 @@ class MultiBoxLoss(nn.Module):
 
             # Encode center-size object coordinates into the form we regressed predicted boxes to
             # true_locs[i] = cxcy_to_gcxgcy(xy_to_cxcy(boxes[i][object_for_each_prior]), self.priors_cxcy)  # (8732, 4)
-            true_locs[i] = cxcy_to_gcxgcy_shape(xy_to_cxcy_shape(boxes[i][object_for_each_prior]), self.priors_cxcy)
+            # true_locs[i] = cxcy_to_gcxgcy_shape(xy_to_cxcy_shape(boxes[i][object_for_each_prior]), self.priors_cxcy)
+            true_locs[i] = cxcy_to_gcxgcy(xy_to_cxcy(boxes[i][object_for_each_prior]), self.priors_cxcy)
 
         # Identify priors that are positive (object/non-background)
         positive_priors = true_classes != 0  # (N, 8732)

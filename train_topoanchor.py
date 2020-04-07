@@ -118,7 +118,7 @@ def main():
               epoch=epoch)
 
         # Save checkpoint
-        if epoch >= 30 and epoch % 30 == 0 or epoch == 10:
+        if epoch >= 30 and epoch % 30 == 0 or epoch == 5:
             _, current_mAP = evaluate(test_loader, model)
             if current_mAP > best_mAP:
                 save_checkpoint(epoch, model, optimizer, name='checkpoints/my_checkpoint_topo_anchor_b32.pth.tar')
