@@ -5,6 +5,7 @@ from math import sqrt
 # from itertools import product as product
 import torchvision
 from deform_conv2 import *
+from Loss import IouLoss
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -198,14 +199,14 @@ class PredictionConvolutions(nn.Module):
     A high score for 'background' = no object.
     """
 
-    def __init__(self, n_classes):
+    def __init__(self, n_classes, n_points):
         """
         :param n_classes: number of different types of objects
         """
         super(PredictionConvolutions, self).__init__()
 
         self.n_classes = n_classes
-
+        self.n_points = n_points
         # Number of prior-boxes we are considering per position in each feature map
         n_boxes = {'conv4_3': 4,
                    'conv7': 6,
@@ -216,12 +217,12 @@ class PredictionConvolutions(nn.Module):
         # 4 prior-boxes implies we use 4 different aspect ratios, etc.
 
         # Localization prediction convolutions (predict offsets w.r.t prior-boxes)
-        self.loc_conv4_3 = DeformConv2d(512, n_boxes['conv4_3'] * 18, kernel_size=3, padding=1)
-        self.loc_conv7 = DeformConv2d(1024, n_boxes['conv7'] * 18, kernel_size=3, padding=1)
-        self.loc_conv8_2 = DeformConv2d(512, n_boxes['conv8_2'] * 18, kernel_size=3, padding=1)
-        self.loc_conv9_2 = DeformConv2d(256, n_boxes['conv9_2'] * 18, kernel_size=3, padding=1)
-        self.loc_conv10_2 = nn.Conv2d(256, n_boxes['conv10_2'] * 18, kernel_size=3, padding=1)
-        self.loc_conv11_2 = nn.Conv2d(256, n_boxes['conv11_2'] * 18, kernel_size=3, padding=1)
+        self.loc_conv4_3 = DeformConv2d(512, n_boxes['conv4_3'] * self.n_points * 2, kernel_size=3, padding=1)
+        self.loc_conv7 = DeformConv2d(1024, n_boxes['conv7'] * self.n_points * 2, kernel_size=3, padding=1)
+        self.loc_conv8_2 = DeformConv2d(512, n_boxes['conv8_2'] * self.n_points * 2, kernel_size=3, padding=1)
+        self.loc_conv9_2 = DeformConv2d(256, n_boxes['conv9_2'] * self.n_points * 2, kernel_size=3, padding=1)
+        self.loc_conv10_2 = nn.Conv2d(256, n_boxes['conv10_2'] * self.n_points * 2, kernel_size=3, padding=1)
+        self.loc_conv11_2 = nn.Conv2d(256, n_boxes['conv11_2'] * self.n_points * 2, kernel_size=3, padding=1)
 
         # Class prediction convolutions (predict classes in localization boxes)
         self.cl_conv4_3 = DeformConv2d(512, n_boxes['conv4_3'] * n_classes, kernel_size=3, padding=1)
@@ -262,27 +263,29 @@ class PredictionConvolutions(nn.Module):
         l_conv4_3 = l_conv4_3.permute(0, 2, 3,
                                       1).contiguous()  # (N, 38, 38, 16), to match prior-box order (after .view())
         # (.contiguous() ensures it is stored in a contiguous chunk of memory, needed for .view() below)
-        l_conv4_3 = l_conv4_3.view(batch_size, -1, 4)  # (N, 5776, 4), there are a total 5776 boxes on this feature map
+        l_conv4_3 = l_conv4_3.view(batch_size, -1,
+                                   self.n_points * 2)  # (N, 5776, 4), there are a total 5776 boxes on this feature map
 
         l_conv7 = self.loc_conv7(conv7_feats)  # (N, 24, 19, 19)
         l_conv7 = l_conv7.permute(0, 2, 3, 1).contiguous()  # (N, 19, 19, 24)
-        l_conv7 = l_conv7.view(batch_size, -1, 4)  # (N, 2166, 4), there are a total 2116 boxes on this feature map
+        l_conv7 = l_conv7.view(batch_size, -1,
+                               self.n_points * 2)  # (N, 2166, 4), there are a total 2116 boxes on this feature map
 
         l_conv8_2 = self.loc_conv8_2(conv8_2_feats)  # (N, 24, 10, 10)
         l_conv8_2 = l_conv8_2.permute(0, 2, 3, 1).contiguous()  # (N, 10, 10, 24)
-        l_conv8_2 = l_conv8_2.view(batch_size, -1, 4)  # (N, 600, 4)
+        l_conv8_2 = l_conv8_2.view(batch_size, -1, self.n_points * 2)  # (N, 600, 4)
 
         l_conv9_2 = self.loc_conv9_2(conv9_2_feats)  # (N, 24, 5, 5)
         l_conv9_2 = l_conv9_2.permute(0, 2, 3, 1).contiguous()  # (N, 5, 5, 24)
-        l_conv9_2 = l_conv9_2.view(batch_size, -1, 4)  # (N, 150, 4)
+        l_conv9_2 = l_conv9_2.view(batch_size, -1, self.n_points * 2)  # (N, 150, 4)
 
         l_conv10_2 = self.loc_conv10_2(conv10_2_feats)  # (N, 16, 3, 3)
         l_conv10_2 = l_conv10_2.permute(0, 2, 3, 1).contiguous()  # (N, 3, 3, 16)
-        l_conv10_2 = l_conv10_2.view(batch_size, -1, 4)  # (N, 36, 4)
+        l_conv10_2 = l_conv10_2.view(batch_size, -1, self.n_points * 2)  # (N, 36, 4)
 
         l_conv11_2 = self.loc_conv11_2(conv11_2_feats)  # (N, 16, 1, 1)
         l_conv11_2 = l_conv11_2.permute(0, 2, 3, 1).contiguous()  # (N, 1, 1, 16)
-        l_conv11_2 = l_conv11_2.view(batch_size, -1, 4)  # (N, 4, 4)
+        l_conv11_2 = l_conv11_2.view(batch_size, -1, self.n_points * 2)  # (N, 4, 4)
 
         # Predict classes in localization boxes
         c_conv4_3 = self.cl_conv4_3(conv4_3_feats)  # (N, 4 * n_classes, 38, 38)
@@ -326,11 +329,11 @@ class SSD300(nn.Module):
     The SSD300 network - encapsulates the base VGG network, auxiliary, and prediction convolutions.
     """
 
-    def __init__(self, n_classes):
+    def __init__(self, n_classes, n_points=9):
         super(SSD300, self).__init__()
         self.transform_method = 'min_max'
         self.n_classes = n_classes
-        self.n_points = 9
+        self.n_points = n_points
         self.base = VGGBase()
         # self.disable_parameter_requires_grad(self.base)
         self.aux_convs = AuxiliaryConvolutions()
@@ -372,7 +375,7 @@ class SSD300(nn.Module):
         locs, classes_scores = self.pred_convs(conv4_3_feats, conv7_feats, conv8_2_feats, conv9_2_feats, conv10_2_feats,
                                                conv11_2_feats)  # (N, 8732, 4), (N, 8732, n_classes)
 
-        return self.rep2bbox(locs), classes_scores, locs
+        return self.rep2bbox(locs, self.transform_method), classes_scores, locs
 
     def create_prior_boxes(self):
         """
@@ -429,20 +432,21 @@ class SSD300(nn.Module):
 
         return prior_boxes
 
-    def rep2bbox(self, predicted_locs):
+    def rep2bbox(self, predicted_locs, transform_method='min_max'):
         points_reshape = predicted_locs.view(predicted_locs.size(0), -1, 2, self.n_points)
         pts_x = points_reshape[:, :, 0, :]
         pts_y = points_reshape[:, :, 1, :]
+        if transform_method == 'min_max':
+            bbox_left = pts_x.min(dim=2, keepdim=True)[0]
+            bbox_right = pts_x.max(dim=2, keepdim=True)[0]
+            bbox_top = pts_y.min(dim=2, keepdim=True)[0]
+            bbox_bottom = pts_y.max(dim=2, keepdim=True)[0]
+        # pts_x_mean = pts_x.mean(dim=2, keepdim=True)
+        # pts_y_mean = pts_x.mean(dim=2, keepdim=True)
+        # bbox_width = bbox_right - bbox_left
+        # bbox_height = bbox_bottom - bbox_top
 
-        bbox_left = pts_x.min(dim=2, keepdim=True)[0]
-        bbox_right = pts_x.max(dim=2, keepdim=True)[0]
-        bbox_top = pts_y.min(dim=2, keepdim=True)[0]
-        bbox_bottom = pts_y.max(dim=2, keepdim=True)[0]
-        pts_x_mean = pts_x.mean(dim=2, keepdim=True)
-        pts_y_mean = pts_x.mean(dim=2, keepdim=True)
-        bbox_width = bbox_right - bbox_left
-        bbox_height = bbox_bottom - bbox_top
-        bbox = torch.cat([pts_x_mean, pts_y_mean, bbox_width, bbox_height], dim=2)
+        bbox = torch.cat([bbox_left, bbox_top, bbox_right, bbox_bottom], dim=2)
 
         return bbox
 
@@ -480,7 +484,7 @@ class SSD300(nn.Module):
             image_scores = list()
             image_points = list()
 
-            decoded_locs = cxcy_to_xy(predicted_locs[i])  # convert reppoints to bounding boxes
+            decoded_locs = predicted_locs[i]  # predict bbox coordinates directly
 
             # Check for each class
             for c in range(1, self.n_classes):
@@ -514,7 +518,7 @@ class SSD300(nn.Module):
                 # A torch.uint8 (byte) tensor to keep track of which predicted boxes to suppress
                 # 1 implies suppress, 0 implies don't suppress
                 # suppress = torch.zeros((n_above_min_score), dtype=torch.uint8).to(device)  # (n_qualified)
-                suppress = torch.zeros((n_above_min_score), dtype=torch.long).to(device)  # (n_qualified)
+                suppress = torch.zeros(n_above_min_score, dtype=torch.long).to(device)  # (n_qualified)
 
                 # Consider each box in order of decreasing scores
                 for box in range(class_decoded_locs.size(0)):
@@ -576,14 +580,14 @@ class MultiBoxLoss(nn.Module):
     (2) a confidence loss for the predicted class scores.
     """
 
-    def __init__(self, priors_cxcy, threshold=0.5, neg_pos_ratio=3, alpha=1.):
+    def __init__(self, priors_cxcy, threshold=0.5, neg_pos_ratio=3, alpha=5.):
         super(MultiBoxLoss, self).__init__()
         self.priors_cxcy = priors_cxcy
         self.priors_xy = cxcy_to_xy(priors_cxcy)
         self.threshold = threshold
         self.neg_pos_ratio = neg_pos_ratio
         self.alpha = alpha
-
+        self.Giou_loss = IouLoss(pred_mode='Corner', reduce='mean', losstype='Diou')
         self.smooth_l1 = nn.L1Loss()
         self.cross_entropy = nn.CrossEntropyLoss(reduce=False)
 
@@ -606,7 +610,6 @@ class MultiBoxLoss(nn.Module):
         n_priors = self.priors_cxcy.size(0)
         n_classes = predicted_scores.size(2)
 
-        # print('Should be equal: ', n_priors, predicted_locs.size(1), predicted_scores.size(1))
         assert n_priors == predicted_locs.size(1) == predicted_scores.size(1)
 
         true_locs = torch.zeros((batch_size, n_priors, 4), dtype=torch.float).to(device)  # (N, 8732, 4)
@@ -646,7 +649,7 @@ class MultiBoxLoss(nn.Module):
 
             # Encode center-size object coordinates into the form we regressed predicted boxes to
             # true_locs[i] = cxcy_to_gcxgcy(xy_to_cxcy(boxes[i][object_for_each_prior]), self.priors_cxcy)  # (8732, 4)
-            true_locs[i] = xy_to_cxcy(boxes[i][object_for_each_prior])
+            true_locs[i] = boxes[i][object_for_each_prior]
 
         # Identify priors that are positive (object/non-background)
         positive_priors = true_classes != 0  # (N, 8732)
@@ -654,7 +657,7 @@ class MultiBoxLoss(nn.Module):
         # LOCALIZATION LOSS
 
         # Localization loss is computed only over positive (non-background) priors
-        loc_loss = self.smooth_l1(predicted_locs[positive_priors], true_locs[positive_priors])  # (), scalar
+        loc_loss = self.Giou_loss(predicted_locs[positive_priors].view(-1, 4), true_locs[positive_priors].view(-1, 4))
 
         # Note: indexing with a torch.uint8 (byte) tensor flattens the tensor when indexing is across multiple dimensions (N & 8732)
         # So, if predicted_locs has the shape (N, 8732, 4), predicted_locs[positive_priors] will have (total positives, 4)

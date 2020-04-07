@@ -25,7 +25,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Learning parameters
 checkpoint = None  # path to model checkpoint, None if none
 batch_size = 32  # batch size
-internal_batchsize = 2
+internal_batchsize = 4
 num_iter_flag = batch_size // internal_batchsize
 
 iterations = 80000 * num_iter_flag  # number of iterations to train
@@ -50,7 +50,7 @@ def main():
     # Initialize model or load checkpoint
     if checkpoint is None:
         start_epoch = 0
-        model = SSD300(n_classes=n_classes)
+        model = SSD300(n_classes=n_classes, n_points=9)
         # Initialize the optimizer, with twice the default learning rate for biases, as in the original Caffe repo
         biases = list()
         not_biases = list()
@@ -117,7 +117,7 @@ def main():
               epoch=epoch)
 
         # Save checkpoint
-        if epoch >= 15 and epoch % 40 == 0 or epoch == 15:
+        if epoch >= 30 and epoch % 30 == 0 or epoch == 3:
             _, current_mAP = evaluate(test_loader, model)
             if current_mAP > best_mAP:
                 save_checkpoint(epoch, model, optimizer, name='checkpoints/my_checkpoint_anchor_rep300_b32.pth.tar')
