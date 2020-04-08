@@ -491,7 +491,7 @@ class SSD300(nn.Module):
                 # Keep only predicted boxes and scores where scores for this class are above the minimum score
                 class_scores = predicted_scores[i][:, c]  # (5685)
 
-                score_above_min_score = (class_scores > min_score) * 1  # torch.uint8 (byte) tensor, for indexing
+                score_above_min_score = (class_scores > min_score).long()  # torch.uint8 (byte) tensor, for indexing
                 n_above_min_score = torch.sum(score_above_min_score).item()
 
                 if n_above_min_score == 0:
@@ -528,7 +528,7 @@ class SSD300(nn.Module):
 
                     # Suppress boxes whose overlaps (with this box) are greater than maximum overlap
                     # Find such boxes and update suppress indices
-                    suppress = torch.max(suppress, (overlap[box] > max_overlap) * 1)
+                    suppress = torch.max(suppress, (overlap[box] > max_overlap).long())
                     # The max operation retains previously suppressed boxes, like an 'OR' operation
 
                     # Don't suppress this box, even though it has an overlap of 1 with itself
@@ -542,8 +542,7 @@ class SSD300(nn.Module):
             # If no object in any class is found, store a placeholder for 'background'
             if len(image_boxes) == 0:
                 image_boxes.append(torch.FloatTensor([[0., 0., 1., 1.]]).to(device))
-                image_points.append(torch.FloatTensor([[0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5,
-                                                        0.5, 0.5, 0.5, 0.5, 0.5, 0.5]]).to(device))
+                image_points.append(torch.FloatTensor([[0.5 for _ in range(self.n_points * 2)]]).to(device))
                 image_labels.append(torch.LongTensor([0]).to(device))
                 image_scores.append(torch.FloatTensor([0.]).to(device))
 
@@ -580,14 +579,14 @@ class MultiBoxLoss(nn.Module):
     (2) a confidence loss for the predicted class scores.
     """
 
-    def __init__(self, priors_cxcy, threshold=0.5, neg_pos_ratio=3, alpha=5.):
+    def __init__(self, priors_cxcy, threshold=0.5, neg_pos_ratio=3, alpha=10.):
         super(MultiBoxLoss, self).__init__()
         self.priors_cxcy = priors_cxcy
         self.priors_xy = cxcy_to_xy(priors_cxcy)
         self.threshold = threshold
         self.neg_pos_ratio = neg_pos_ratio
         self.alpha = alpha
-        self.Giou_loss = IouLoss(pred_mode='Corner', reduce='mean', losstype='Diou')
+        self.Diou_loss = IouLoss(pred_mode='Corner', reduce='mean', losstype='Diou')
         self.smooth_l1 = nn.L1Loss()
         self.cross_entropy = nn.CrossEntropyLoss(reduce=False)
 
@@ -657,7 +656,7 @@ class MultiBoxLoss(nn.Module):
         # LOCALIZATION LOSS
 
         # Localization loss is computed only over positive (non-background) priors
-        loc_loss = self.Giou_loss(predicted_locs[positive_priors].view(-1, 4), true_locs[positive_priors].view(-1, 4))
+        loc_loss = self.Diou_loss(predicted_locs[positive_priors].view(-1, 4), true_locs[positive_priors].view(-1, 4))
 
         # Note: indexing with a torch.uint8 (byte) tensor flattens the tensor when indexing is across multiple dimensions (N & 8732)
         # So, if predicted_locs has the shape (N, 8732, 4), predicted_locs[positive_priors] will have (total positives, 4)
