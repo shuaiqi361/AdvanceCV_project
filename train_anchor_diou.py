@@ -2,7 +2,7 @@ import time
 import torch.backends.cudnn as cudnn
 import torch.optim
 import torch.utils.data
-from AnchorShapeModel import SSD300, MultiBoxLoss
+from AnchorDIOUModel import SSD300, MultiBoxLoss
 from datasets import PascalVOCDataset
 from utils import *
 from tqdm import tqdm
@@ -14,7 +14,7 @@ pp = PrettyPrinter()
 
 # Data parameters
 data_folder = 'data'  # folder with data files
-f_log = open('log/train_anchor_shape_log.txt', 'w')
+f_log = open('log/train_anchor_diou_log.txt', 'w')
 keep_difficult = True  # use objects considered difficult to detect?
 
 # Model parameters
@@ -50,7 +50,7 @@ def main():
     # Initialize model or load checkpoint
     if checkpoint is None:
         start_epoch = 0
-        model = SSD300(n_classes=n_classes)
+        model = SSD300(n_classes=n_classes, n_points=9)
         # Initialize the optimizer, with twice the default learning rate for biases, as in the original Caffe repo
         biases = list()
         not_biases = list()
@@ -72,7 +72,7 @@ def main():
 
     # Move to default device
     model = model.to(device)
-    criterion = MultiBoxLoss(priors_cxcy=model.priors_cxcy, shape_basis=model.shape_basis).to(device)
+    criterion = MultiBoxLoss(priors_cxcy=model.priors_cxcy).to(device)
 
     # Custom dataloaders
     train_dataset = PascalVOCDataset(data_folder,
@@ -89,8 +89,7 @@ def main():
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=internal_batchsize, shuffle=False,
                                               collate_fn=test_dataset.collate_fn, num_workers=workers, pin_memory=True)
 
-    # Calculate total number of epochs to train and the epochs to decay learning rate at
-    # (i.e. convert iterations to epochs)
+    # Calculate total number of epochs to train and the epochs to decay learning rate at (i.e. convert iterations to epochs)
     # To convert iterations to epochs, divide iterations by the number of iterations per epoch
     # The paper trains for 120,000 iterations with a batch size of 32, decays after 80,000 and 100,000 iterations
 
@@ -118,16 +117,16 @@ def main():
               epoch=epoch)
 
         # Save checkpoint
-        if epoch >= 15 and epoch % 40 == 0 or epoch == 5:
+        if epoch >= 30 and epoch % 30 == 0 or epoch == 5:
             _, current_mAP = evaluate(test_loader, model)
             if current_mAP > best_mAP:
-                save_checkpoint(epoch, model, optimizer, name='checkpoints/my_checkpoint_anchor_shape_b32.pth.tar')
+                save_checkpoint(epoch, model, optimizer, name='checkpoints/my_checkpoint_anchor_diou_b32.pth.tar')
                 best_mAP = current_mAP
                 # criterion.increase_threshold(0.05)
 
     _, current_mAP = evaluate(test_loader, model)
     if current_mAP > best_mAP:
-        save_checkpoint(epoch, model, optimizer, name='checkpoints/my_checkpoint_anchor_shape_b32.pth.tar')
+        save_checkpoint(epoch, model, optimizer, name='checkpoints/my_checkpoint_anchor_diou_b32.pth.tar')
         best_mAP = current_mAP
 
 
@@ -235,12 +234,12 @@ def evaluate(test_loader, model):
 
             # Forward prop.
             time_start = time.time()
-            predicted_locs, predicted_scores, coeff = model(images)
+            predicted_locs, predicted_scores, point_locs = model(images)
 
 
             # Detect objects in SSD output
             det_boxes_batch, det_labels_batch, det_scores_batch, det_points_batch = model.detect_objects(predicted_locs,
-                                                                                       predicted_scores, coeff,
+                                                                                       predicted_scores, point_locs,
                                                                                        min_score=0.01, max_overlap=0.45,
                                                                                        top_k=200)
             time_end = time.time()
