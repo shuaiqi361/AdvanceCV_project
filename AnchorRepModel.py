@@ -359,6 +359,7 @@ class SSD300(nn.Module):
         :return: 8732 locations and class scores (i.e. w.r.t each prior box) for each image
         """
         # Run VGG base network convolutions (lower level feature map generators)
+        batch_size = image.size(0)
         conv4_3_feats, conv7_feats = self.base(image)  # (N, 512, 38, 38), (N, 1024, 19, 19)
 
         # Rescale conv4_3 after L2 norm
@@ -375,7 +376,16 @@ class SSD300(nn.Module):
         locs, classes_scores = self.pred_convs(conv4_3_feats, conv7_feats, conv8_2_feats, conv9_2_feats, conv10_2_feats,
                                                conv11_2_feats)  # (N, 8732, 4), (N, 8732, n_classes)
 
-        return self.rep2bbox(locs, self.transform_method), classes_scores, locs
+        # predicted_bboxes = torch.zeros((batch_size, self.priors_cxcy.size(0), 4), dtype=torch.float).to(device)
+        # predicted_points = torch.zeros((batch_size, self.priors_cxcy.size(0), self.n_points * 2), dtype=torch.float).to(
+        #     device)
+
+        predicted_bboxes = self.rep2bbox(locs, self.transform_method)
+        predicted_points = self.rep2point(locs)
+
+        print(predicted_bboxes.size(), predicted_points.size())
+        exit()
+        return predicted_bboxes, classes_scores, predicted_points
 
     def create_prior_boxes(self):
         """
@@ -443,20 +453,31 @@ class SSD300(nn.Module):
             bbox_bottom = pts_y.max(dim=2, keepdim=True)[0]
             bbox = torch.cat([bbox_left, bbox_top, bbox_right, bbox_bottom], dim=2)
         elif transform_method == 'center':
-            bbox_left = pts_x.min(dim=2, keepdim=True)[0]
-            bbox_right = pts_x.max(dim=2, keepdim=True)[0]
-            bbox_top = pts_y.min(dim=2, keepdim=True)[0]
-            bbox_bottom = pts_y.max(dim=2, keepdim=True)[0]
-            pts_x_mean = pts_x.mean(dim=2, keepdim=True)
-            pts_y_mean = pts_x.mean(dim=2, keepdim=True)
-            bbox_width = bbox_right - bbox_left
-            bbox_height = bbox_bottom - bbox_top
+            bbox_left = pts_x.min(dim=2, keepdim=True)[0] * self.priors_cxcy[:, 2].unsqueeze(-1).unsqueeze(0) / 10 \
+                        + self.priors_cxcy[:, 0].unsqueeze(-1).unsqueeze(0)
+            bbox_right = pts_x.max(dim=2, keepdim=True)[0] * self.priors_cxcy[:, 2].unsqueeze(-1).unsqueeze(0) / 10 \
+                         + self.priors_cxcy[:, 0].unsqueeze(-1).unsqueeze(0)
+            bbox_top = pts_y.min(dim=2, keepdim=True)[0] * self.priors_cxcy[:, 3].unsqueeze(-1).unsqueeze(0) / 10 \
+                       + self.priors_cxcy[:, 1].unsqueeze(-1).unsqueeze(0)
+            bbox_bottom = pts_y.max(dim=2, keepdim=True)[0] * self.priors_cxcy[:, 3].unsqueeze(-1).unsqueeze(0) / 10 \
+                          + self.priors_cxcy[:, 1].unsqueeze(-1).unsqueeze(0)
+            # pts_x_mean = pts_x.mean(dim=2, keepdim=True)
+            # pts_y_mean = pts_x.mean(dim=2, keepdim=True)
+            # bbox_width = bbox_right - bbox_left
+            # bbox_height = bbox_bottom - bbox_top
 
-            bbox = torch.cat([pts_x_mean, pts_y_mean, bbox_width, bbox_height], dim=2)
+            bbox = torch.cat([bbox_left, bbox_top, bbox_right, bbox_bottom], dim=2)
         else:
             raise NotImplementedError
 
         return bbox
+
+    def rep2point(self, predicted_locs):
+        predicted_points = predicted_locs * self.priors_cxcy[:, -2:].unsqueeze(0).repeat(
+                            predicted_locs.size(0), 1, self.n_points) / 10 \
+                           + self.priors_cxcy[:, :2].unsqueeze(0).repeat(predicted_locs.size(0), 1, self.n_points)
+
+        return predicted_points
 
     def detect_objects(self, predicted_locs, predicted_scores, rep_points, min_score, max_overlap, top_k):
         """
