@@ -383,6 +383,8 @@ class SSD300(nn.Module):
         predicted_bboxes = self.rep2bbox(locs, self.transform_method)
         predicted_points = self.rep2point(locs)
 
+        print(predicted_bboxes.size(), predicted_points.size())
+        exit()
         return predicted_bboxes, classes_scores, predicted_points.clamp_(0, 1)
 
     def create_prior_boxes(self):
@@ -451,20 +453,22 @@ class SSD300(nn.Module):
             bbox_bottom = pts_y.max(dim=2, keepdim=True)[0]
             bbox = torch.cat([bbox_left, bbox_top, bbox_right, bbox_bottom], dim=2)
         elif transform_method == 'center':
-            bbox_left = pts_x.min(dim=2, keepdim=True)[0] * self.priors_cxcy[:, 2].unsqueeze(-1).unsqueeze(0) / 10 \
+            # bbox_left = pts_x.min(dim=2, keepdim=True)[0] * self.priors_cxcy[:, 2].unsqueeze(-1).unsqueeze(0) / 10 \
+            #             + self.priors_cxcy[:, 0].unsqueeze(-1).unsqueeze(0)
+            # bbox_right = pts_x.max(dim=2, keepdim=True)[0] * self.priors_cxcy[:, 2].unsqueeze(-1).unsqueeze(0) / 10 \
+            #              + self.priors_cxcy[:, 0].unsqueeze(-1).unsqueeze(0)
+            # bbox_top = pts_y.min(dim=2, keepdim=True)[0] * self.priors_cxcy[:, 3].unsqueeze(-1).unsqueeze(0) / 10 \
+            #            + self.priors_cxcy[:, 1].unsqueeze(-1).unsqueeze(0)
+            # bbox_bottom = pts_y.max(dim=2, keepdim=True)[0] * self.priors_cxcy[:, 3].unsqueeze(-1).unsqueeze(0) / 10 \
+            #               + self.priors_cxcy[:, 1].unsqueeze(-1).unsqueeze(0)
+            pts_x_mean = pts_x.mean(dim=2, keepdim=True) * self.priors_cxcy[:, 2].unsqueeze(-1).unsqueeze(0) / 10 \
                         + self.priors_cxcy[:, 0].unsqueeze(-1).unsqueeze(0)
-            bbox_right = pts_x.max(dim=2, keepdim=True)[0] * self.priors_cxcy[:, 2].unsqueeze(-1).unsqueeze(0) / 10 \
-                         + self.priors_cxcy[:, 0].unsqueeze(-1).unsqueeze(0)
-            bbox_top = pts_y.min(dim=2, keepdim=True)[0] * self.priors_cxcy[:, 3].unsqueeze(-1).unsqueeze(0) / 10 \
-                       + self.priors_cxcy[:, 1].unsqueeze(-1).unsqueeze(0)
-            bbox_bottom = pts_y.max(dim=2, keepdim=True)[0] * self.priors_cxcy[:, 3].unsqueeze(-1).unsqueeze(0) / 10 \
+            pts_y_mean = pts_x.mean(dim=2, keepdim=True) * self.priors_cxcy[:, 3].unsqueeze(-1).unsqueeze(0) / 10 \
                           + self.priors_cxcy[:, 1].unsqueeze(-1).unsqueeze(0)
-            # pts_x_mean = pts_x.mean(dim=2, keepdim=True)
-            # pts_y_mean = pts_x.mean(dim=2, keepdim=True)
-            # bbox_width = bbox_right - bbox_left
-            # bbox_height = bbox_bottom - bbox_top
+            bbox_width = pts_x.max(dim=2, keepdim=True)[0] - pts_x.min(dim=2, keepdim=True)[0]
+            bbox_height = pts_y.max(dim=2, keepdim=True)[0] - pts_y.min(dim=2, keepdim=True)[0]
 
-            bbox = torch.cat([bbox_left, bbox_top, bbox_right, bbox_bottom], dim=2)
+            bbox = torch.cat([pts_x_mean, pts_y_mean, bbox_width, bbox_height], dim=2)
         else:
             raise NotImplementedError
 
@@ -511,7 +515,7 @@ class SSD300(nn.Module):
             image_scores = list()
             image_points = list()
 
-            decoded_locs = predicted_locs[i]  # predict bbox coordinates directly
+            decoded_locs = cxcy_to_xy(predicted_locs[i])  # predict bbox coordinates directly
 
             # Check for each class
             for c in range(1, self.n_classes):
@@ -677,7 +681,7 @@ class MultiBoxLoss(nn.Module):
             # Encode center-size object coordinates into the form we regressed predicted boxes to
             # true_locs[i] = cxcy_to_gcxgcy(xy_to_cxcy(boxes[i][object_for_each_prior]), self.priors_cxcy)  # (8732, 4)
             true_locs[i] = boxes[i][object_for_each_prior]
-            decoded_locs[i] = predicted_locs[i]
+            decoded_locs[i] = cxcy_to_xy(predicted_locs[i])
 
         # Identify priors that are positive (object/non-background)
         positive_priors = true_classes != 0  # (N, 8732)
