@@ -331,7 +331,7 @@ class SSD300(nn.Module):
 
     def __init__(self, n_classes, n_points=9):
         super(SSD300, self).__init__()
-        self.transform_method = 'min_max'
+        self.transform_method = 'center'
         self.n_classes = n_classes
         self.n_points = n_points
         self.base = VGGBase()
@@ -441,12 +441,20 @@ class SSD300(nn.Module):
             bbox_right = pts_x.max(dim=2, keepdim=True)[0]
             bbox_top = pts_y.min(dim=2, keepdim=True)[0]
             bbox_bottom = pts_y.max(dim=2, keepdim=True)[0]
-        # pts_x_mean = pts_x.mean(dim=2, keepdim=True)
-        # pts_y_mean = pts_x.mean(dim=2, keepdim=True)
-        # bbox_width = bbox_right - bbox_left
-        # bbox_height = bbox_bottom - bbox_top
+            bbox = torch.cat([bbox_left, bbox_top, bbox_right, bbox_bottom], dim=2)
+        elif transform_method == 'center':
+            bbox_left = pts_x.min(dim=2, keepdim=True)[0]
+            bbox_right = pts_x.max(dim=2, keepdim=True)[0]
+            bbox_top = pts_y.min(dim=2, keepdim=True)[0]
+            bbox_bottom = pts_y.max(dim=2, keepdim=True)[0]
+            pts_x_mean = pts_x.mean(dim=2, keepdim=True)
+            pts_y_mean = pts_x.mean(dim=2, keepdim=True)
+            bbox_width = bbox_right - bbox_left
+            bbox_height = bbox_bottom - bbox_top
 
-        bbox = torch.cat([bbox_left, bbox_top, bbox_right, bbox_bottom], dim=2)
+            bbox = torch.cat([pts_x_mean, pts_y_mean, bbox_width, bbox_height], dim=2)
+        else:
+            raise NotImplementedError
 
         return bbox
 
@@ -484,7 +492,7 @@ class SSD300(nn.Module):
             image_scores = list()
             image_points = list()
 
-            decoded_locs = predicted_locs[i]  # predict bbox coordinates directly
+            decoded_locs = cxcy_to_xy(predicted_locs[i])  # predict bbox coordinates directly
 
             # Check for each class
             for c in range(1, self.n_classes):
@@ -579,7 +587,7 @@ class MultiBoxLoss(nn.Module):
     (2) a confidence loss for the predicted class scores.
     """
 
-    def __init__(self, priors_cxcy, threshold=0.5, neg_pos_ratio=3, alpha=10.):
+    def __init__(self, priors_cxcy, threshold=0.5, neg_pos_ratio=3, alpha=5.):
         super(MultiBoxLoss, self).__init__()
         self.priors_cxcy = priors_cxcy
         self.priors_xy = cxcy_to_xy(priors_cxcy)
@@ -611,6 +619,7 @@ class MultiBoxLoss(nn.Module):
 
         assert n_priors == predicted_locs.size(1) == predicted_scores.size(1)
 
+        decoded_locs = torch.zeros((batch_size, n_priors, 4), dtype=torch.float).to(device)  # (N, 8732, 4)
         true_locs = torch.zeros((batch_size, n_priors, 4), dtype=torch.float).to(device)  # (N, 8732, 4)
         true_classes = torch.zeros((batch_size, n_priors), dtype=torch.long).to(device)  # (N, 8732)
 
@@ -649,6 +658,7 @@ class MultiBoxLoss(nn.Module):
             # Encode center-size object coordinates into the form we regressed predicted boxes to
             # true_locs[i] = cxcy_to_gcxgcy(xy_to_cxcy(boxes[i][object_for_each_prior]), self.priors_cxcy)  # (8732, 4)
             true_locs[i] = boxes[i][object_for_each_prior]
+            decoded_locs[i] = cxcy_to_xy(predicted_locs[i])
 
         # Identify priors that are positive (object/non-background)
         positive_priors = true_classes != 0  # (N, 8732)
@@ -656,7 +666,7 @@ class MultiBoxLoss(nn.Module):
         # LOCALIZATION LOSS
 
         # Localization loss is computed only over positive (non-background) priors
-        loc_loss = self.Diou_loss(predicted_locs[positive_priors].view(-1, 4), true_locs[positive_priors].view(-1, 4))
+        loc_loss = self.Diou_loss(decoded_locs[positive_priors].view(-1, 4), true_locs[positive_priors].view(-1, 4))
 
         # Note: indexing with a torch.uint8 (byte) tensor flattens the tensor when indexing is across multiple dimensions (N & 8732)
         # So, if predicted_locs has the shape (N, 8732, 4), predicted_locs[positive_priors] will have (total positives, 4)
