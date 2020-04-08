@@ -383,9 +383,7 @@ class SSD300(nn.Module):
         predicted_bboxes = self.rep2bbox(locs, self.transform_method)
         predicted_points = self.rep2point(locs)
 
-        print(predicted_bboxes.size(), predicted_points.size())
-        exit()
-        return predicted_bboxes, classes_scores, predicted_points
+        return predicted_bboxes, classes_scores, predicted_points.clamp_(0, 1)
 
     def create_prior_boxes(self):
         """
@@ -513,7 +511,7 @@ class SSD300(nn.Module):
             image_scores = list()
             image_points = list()
 
-            decoded_locs = cxcy_to_xy(predicted_locs[i])  # predict bbox coordinates directly
+            decoded_locs = predicted_locs[i]  # predict bbox coordinates directly
 
             # Check for each class
             for c in range(1, self.n_classes):
@@ -679,7 +677,7 @@ class MultiBoxLoss(nn.Module):
             # Encode center-size object coordinates into the form we regressed predicted boxes to
             # true_locs[i] = cxcy_to_gcxgcy(xy_to_cxcy(boxes[i][object_for_each_prior]), self.priors_cxcy)  # (8732, 4)
             true_locs[i] = boxes[i][object_for_each_prior]
-            decoded_locs[i] = cxcy_to_xy(predicted_locs[i])
+            decoded_locs[i] = predicted_locs[i]
 
         # Identify priors that are positive (object/non-background)
         positive_priors = true_classes != 0  # (N, 8732)
