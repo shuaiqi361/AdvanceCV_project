@@ -140,10 +140,10 @@ class AuxiliaryConvolutions(nn.Module):
 
         # Auxiliary/additional convolutions on top of the VGG base
         self.conv8_1 = nn.Conv2d(1024, 256, kernel_size=1, padding=0)  # stride = 1, by default
-        self.conv8_2 = nn.Conv2d(256, 512, kernel_size=3, stride=2, padding=1)  # dim. reduction because stride > 1
+        self.conv8_2 = DeformConv2d(256, 512, kernel_size=3, stride=2, padding=1)  # dim. reduction because stride > 1
 
         self.conv9_1 = nn.Conv2d(512, 128, kernel_size=1, padding=0)
-        self.conv9_2 = nn.Conv2d(128, 256, kernel_size=3, stride=2, padding=1)  # dim. reduction because stride > 1
+        self.conv9_2 = DeformConv2d(128, 256, kernel_size=3, stride=2, padding=1)  # dim. reduction because stride > 1
 
         self.conv10_1 = nn.Conv2d(256, 128, kernel_size=1, padding=0)
         self.conv10_2 = nn.Conv2d(128, 256, kernel_size=3, padding=0)  # dim. reduction because padding = 0
@@ -337,8 +337,8 @@ class SSD300(nn.Module):
         self.n_classes = n_classes
 
         self.base = VGGBase()
-        # self.shape_dict = np.load('dict_val2017_v32_b64_alpha0.2.npy')
-        self.shape_dict = np.load('dict_val2017_v32_b16.npy')
+        self.shape_dict = np.load('dict_val2017_v32_b64_alpha0.2.npy')
+        # self.shape_dict = np.load('dict_val2017_v32_b16.npy')
         self.n_components, self.n_feats = self.shape_dict.shape
         self.n_vertices = self.n_feats // 2
         self.shape_basis = torch.FloatTensor(torch.from_numpy(self.create_norm_shape_dict())).to(device)
@@ -361,8 +361,8 @@ class SSD300(nn.Module):
         norm_shape = np.zeros(shape=self.shape_dict.shape, dtype=np.float32)
         for r in np.arange(self.n_components):
             contour = np.reshape(self.shape_dict[r, :], newshape=(self.n_vertices, 2))
-            contour -= np.min(contour, axis=0, keepdims=True)
-            norm_contour = contour / np.max(contour, axis=0, keepdims=True)  # normalize shape to be in [0, 1]
+            contour -= np.mean(contour, axis=0, keepdims=True)
+            norm_contour = contour / np.std(contour, axis=0, keepdims=True)  # normalize shape to be in [0, 1]
             norm_shape[r, :] = np.reshape(norm_contour, newshape=(self.n_feats, ))
 
         return norm_shape
@@ -611,7 +611,7 @@ class MultiBoxLoss(nn.Module):
     (2) a confidence loss for the predicted class scores.
     """
 
-    def __init__(self, priors_cxcy, shape_basis, threshold=0.5, neg_pos_ratio=3, alpha=5., beta=0.01):
+    def __init__(self, priors_cxcy, shape_basis, threshold=0.5, neg_pos_ratio=3, alpha=5., beta=0.0005):
         super(MultiBoxLoss, self).__init__()
         self.priors_cxcy = priors_cxcy
         self.priors_xy = cxcy_to_xy(priors_cxcy)
