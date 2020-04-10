@@ -7,7 +7,7 @@ import torchvision
 from deform_conv2 import *
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+# device = 'cpu'
 
 class VGGBase(nn.Module):
     """
@@ -478,7 +478,7 @@ class SSD300(nn.Module):
                 # print(c, class_scores.size())
                 # print(class_scores)
                 # print(torch.sum(class_scores))
-                score_above_min_score = (class_scores > min_score) * 1  # torch.uint8 (byte) tensor, for indexing
+                score_above_min_score = (class_scores > min_score).long()  # torch.uint8 (byte) tensor, for indexing
                 # print(score_above_min_score.size(), score_above_min_score[:10])
                 n_above_min_score = torch.sum(score_above_min_score).item()
                 # n_above_min_score = len(score_above_min_score)
@@ -515,7 +515,7 @@ class SSD300(nn.Module):
                 # A torch.uint8 (byte) tensor to keep track of which predicted boxes to suppress
                 # 1 implies suppress, 0 implies don't suppress
                 # suppress = torch.zeros((n_above_min_score), dtype=torch.uint8).to(device)  # (n_qualified)
-                suppress = torch.zeros((n_above_min_score), dtype=torch.long).to(device)  # (n_qualified)
+                suppress = torch.zeros(n_above_min_score, dtype=torch.long).to(device)  # (n_qualified)
                 # print(c, 'suppress size: ', suppress.size())
 
                 # print('Arrives 511')
@@ -527,7 +527,7 @@ class SSD300(nn.Module):
 
                     # Suppress boxes whose overlaps (with this box) are greater than maximum overlap
                     # Find such boxes and update suppress indices
-                    suppress = torch.max(suppress, (overlap[box] > max_overlap) * 1)
+                    suppress = torch.max(suppress, (overlap[box] > max_overlap).long())
                     # The max operation retains previously suppressed boxes, like an 'OR' operation
 
                     # Don't suppress this box, even though it has an overlap of 1 with itself
