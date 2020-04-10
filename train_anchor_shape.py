@@ -14,7 +14,7 @@ pp = PrettyPrinter()
 
 # Data parameters
 data_folder = 'data'  # folder with data files
-f_log = open('log/train_anchor_shape_log.txt', 'w')
+f_log = open('log/train_anchor_shape_basis64_log.txt', 'w')
 keep_difficult = True  # use objects considered difficult to detect?
 
 # Model parameters
@@ -28,14 +28,14 @@ batch_size = 32  # batch size
 internal_batchsize = 2
 num_iter_flag = batch_size // internal_batchsize
 
-iterations = 80000 * num_iter_flag  # number of iterations to train
+iterations = 70000 * num_iter_flag  # number of iterations to train
 workers = 4  # number of workers for loading data in the DataLoader
-print_freq = 3200  # print training status every __ batches
-lr = 1e-3  # learning rate
-decay_lr_at = [40000 * num_iter_flag, 70000 * num_iter_flag]  # decay learning rate after these many iterations
+print_freq = 100  # print training status every __ batches
+lr = 2e-4  # learning rate
+decay_lr_at = [30000 * num_iter_flag, 60000 * num_iter_flag]  # decay learning rate after these many iterations
 decay_lr_to = 0.1  # decay learning rate to this fraction of the existing learning rate
 momentum = 0.9  # momentum
-weight_decay = 5e-4  # weight decay
+weight_decay = 1e-4  # weight decay
 grad_clip = None  # clip if gradients are exploding, which may happen at larger batch sizes (sometimes at 32) - you will recognize it by a sorting error in the MuliBox loss calculation
 
 cudnn.benchmark = True
@@ -118,16 +118,16 @@ def main():
               epoch=epoch)
 
         # Save checkpoint
-        if epoch >= 15 and epoch % 40 == 0 or epoch == 5:
+        if epoch >= 15 and epoch % 40 == 0 or epoch == 3:
             _, current_mAP = evaluate(test_loader, model)
             if current_mAP > best_mAP:
-                save_checkpoint(epoch, model, optimizer, name='checkpoints/my_checkpoint_anchor_shape_b32.pth.tar')
+                save_checkpoint(epoch, model, optimizer, name='checkpoints/my_checkpoint_anchor_shape_basis64.pth.tar')
                 best_mAP = current_mAP
                 # criterion.increase_threshold(0.05)
 
     _, current_mAP = evaluate(test_loader, model)
     if current_mAP > best_mAP:
-        save_checkpoint(epoch, model, optimizer, name='checkpoints/my_checkpoint_anchor_shape_b32.pth.tar')
+        save_checkpoint(epoch, model, optimizer, name='checkpoints/my_checkpoint_anchor_shape_basis64.pth.tar')
         best_mAP = current_mAP
 
 
@@ -161,10 +161,10 @@ def train(train_loader, model, criterion, optimizer, epoch):
         labels = [l.to(device) for l in labels]
 
         # Forward prop.
-        predicted_locs, predicted_scores, _ = model(images)  # (N, 8732, 4), (N, 8732, n_classes)
+        predicted_locs, predicted_scores, _, coeff = model(images)  # (N, 8732, 4), (N, 8732, n_classes)
 
         # Loss
-        loss = criterion(predicted_locs, predicted_scores, boxes, labels) / num_iter_flag  # scalar
+        loss = criterion(predicted_locs, predicted_scores, coeff, boxes, labels) / num_iter_flag  # scalar
 
         # Backward prop.
         if i % num_iter_flag == 0 and i != 0:
@@ -204,7 +204,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
             #       'Loss {loss.val:.4f} ({loss.avg:.4f})\t'.format(epoch, i, len(train_loader),
             #                                                       batch_time=batch_time,
             #                                                       data_time=data_time, loss=losses))
-    del predicted_locs, predicted_scores, images, boxes, labels  # free some memory since their histories may be stored
+    del predicted_locs, predicted_scores, images, boxes, labels, coeff  # free some memory since their histories may be stored
 
 
 def evaluate(test_loader, model):
@@ -235,12 +235,11 @@ def evaluate(test_loader, model):
 
             # Forward prop.
             time_start = time.time()
-            predicted_locs, predicted_scores, coeff = model(images)
-
+            predicted_locs, predicted_scores, sparse_points, _ = model(images)
 
             # Detect objects in SSD output
             det_boxes_batch, det_labels_batch, det_scores_batch, det_points_batch = model.detect_objects(predicted_locs,
-                                                                                       predicted_scores, coeff,
+                                                                                       predicted_scores, sparse_points,
                                                                                        min_score=0.01, max_overlap=0.45,
                                                                                        top_k=200)
             time_end = time.time()
