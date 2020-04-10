@@ -118,7 +118,7 @@ def main():
               epoch=epoch)
 
         # Save checkpoint
-        if epoch >= 15 and epoch % 40 == 0 or epoch == 3:
+        if epoch >= 15 and epoch % 40 == 0 or epoch == 0:
             _, current_mAP = evaluate(test_loader, model)
             if current_mAP > best_mAP:
                 save_checkpoint(epoch, model, optimizer, name='checkpoints/my_checkpoint_anchor_shape_basis64.pth.tar')
