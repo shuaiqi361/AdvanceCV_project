@@ -118,7 +118,7 @@ def main():
               epoch=epoch)
 
         # Save checkpoint
-        if epoch >= 15 and epoch % 40 == 0 or epoch == 3:
+        if epoch >= 15 and epoch % 40 == 0 or epoch == 10:
             _, current_mAP = evaluate(test_loader, model)
             if current_mAP > best_mAP:
                 save_checkpoint(epoch, model, optimizer, name='checkpoints/my_checkpoint_anchor_shape_basis64.pth.tar')
@@ -161,10 +161,10 @@ def train(train_loader, model, criterion, optimizer, epoch):
         labels = [l.to(device) for l in labels]
 
         # Forward prop.
-        predicted_locs, predicted_scores, _, coeff = model(images)  # (N, 8732, 4), (N, 8732, n_classes)
+        predicted_locs, refined_locs, predicted_scores, _, coeff = model(images)  # (N, 8732, 4), (N, 8732, n_classes)
 
         # Loss
-        loss = criterion(predicted_locs, predicted_scores, coeff, boxes, labels) / num_iter_flag  # scalar
+        loss = criterion(predicted_locs, refined_locs, predicted_scores, coeff, boxes, labels) / num_iter_flag  # scalar
 
         # Backward prop.
         if i % num_iter_flag == 0 and i != 0:
@@ -235,7 +235,7 @@ def evaluate(test_loader, model):
 
             # Forward prop.
             time_start = time.time()
-            predicted_locs, predicted_scores, sparse_points, _ = model(images)
+            _, predicted_locs, predicted_scores, sparse_points, _ = model(images)
 
             # Detect objects in SSD output
             det_boxes_batch, det_labels_batch, det_scores_batch, det_points_batch = model.detect_objects(predicted_locs,

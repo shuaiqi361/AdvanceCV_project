@@ -200,7 +200,7 @@ class PredictionConvolutions(nn.Module):
     A high score for 'background' = no object.
     """
 
-    def __init__(self, n_classes, n_components):
+    def __init__(self, n_classes, n_components, n_points):
         """
         :param n_classes: number of different types of objects
         """
@@ -208,6 +208,7 @@ class PredictionConvolutions(nn.Module):
 
         self.n_classes = n_classes
         self.components = n_components
+        self.n_points = n_points
 
         # Number of prior-boxes we are considering per position in each feature map
         n_boxes = {'conv4_3': 4,
@@ -219,12 +220,12 @@ class PredictionConvolutions(nn.Module):
         # 4 prior-boxes implies we use 4 different aspect ratios, etc.
 
         # Localization prediction convolutions (predict offsets w.r.t prior-boxes)
-        self.loc_conv4_3 = nn.Conv2d(512, n_boxes['conv4_3'] * self.components, kernel_size=3, padding=1)
-        self.loc_conv7 = nn.Conv2d(1024, n_boxes['conv7'] * self.components, kernel_size=3, padding=1)
-        self.loc_conv8_2 = nn.Conv2d(512, n_boxes['conv8_2'] * self.components, kernel_size=3, padding=1)
-        self.loc_conv9_2 = nn.Conv2d(256, n_boxes['conv9_2'] * self.components, kernel_size=3, padding=1)
-        self.loc_conv10_2 = nn.Conv2d(256, n_boxes['conv10_2'] * self.components, kernel_size=3, padding=1)
-        self.loc_conv11_2 = nn.Conv2d(256, n_boxes['conv11_2'] * self.components, kernel_size=3, padding=1)
+        self.loc_conv4_3 = nn.Conv2d(512, n_boxes['conv4_3'] * (self.components + self.n_points * 2), kernel_size=3, padding=1)
+        self.loc_conv7 = nn.Conv2d(1024, n_boxes['conv7'] * (self.components + self.n_points * 2), kernel_size=3, padding=1)
+        self.loc_conv8_2 = nn.Conv2d(512, n_boxes['conv8_2'] * (self.components + self.n_points * 2), kernel_size=3, padding=1)
+        self.loc_conv9_2 = nn.Conv2d(256, n_boxes['conv9_2'] * (self.components + self.n_points * 2), kernel_size=3, padding=1)
+        self.loc_conv10_2 = nn.Conv2d(256, n_boxes['conv10_2'] * (self.components + self.n_points * 2), kernel_size=3, padding=1)
+        self.loc_conv11_2 = nn.Conv2d(256, n_boxes['conv11_2'] * (self.components + self.n_points * 2), kernel_size=3, padding=1)
 
         # Class prediction convolutions (predict classes in localization boxes)
         self.cl_conv4_3 = nn.Conv2d(512, n_boxes['conv4_3'] * n_classes, kernel_size=3, padding=1)
@@ -266,28 +267,28 @@ class PredictionConvolutions(nn.Module):
                                       1).contiguous()  # (N, 38, 38, 16), to match prior-box order (after .view())
         # (.contiguous() ensures it is stored in a contiguous chunk of memory, needed for .view() below)
         l_conv4_3 = l_conv4_3.view(batch_size, -1,
-                                   self.components)  # (N, 5776, 4), there are a total 5776 boxes on this feature map
+                                   (self.components + self.n_points * 2))  # (N, 5776, 4), there are a total 5776 boxes on this feature map
 
         l_conv7 = self.loc_conv7(conv7_feats)  # (N, 24, 19, 19)
         l_conv7 = l_conv7.permute(0, 2, 3, 1).contiguous()  # (N, 19, 19, 24)
         l_conv7 = l_conv7.view(batch_size, -1,
-                               self.components)  # (N, 2166, 4), there are a total 2116 boxes on this feature map
+                               (self.components + self.n_points * 2))  # (N, 2166, 4), there are a total 2116 boxes on this feature map
 
         l_conv8_2 = self.loc_conv8_2(conv8_2_feats)  # (N, 24, 10, 10)
         l_conv8_2 = l_conv8_2.permute(0, 2, 3, 1).contiguous()  # (N, 10, 10, 24)
-        l_conv8_2 = l_conv8_2.view(batch_size, -1, self.components)  # (N, 600, 4)
+        l_conv8_2 = l_conv8_2.view(batch_size, -1, (self.components + self.n_points * 2))  # (N, 600, 4)
 
         l_conv9_2 = self.loc_conv9_2(conv9_2_feats)  # (N, 24, 5, 5)
         l_conv9_2 = l_conv9_2.permute(0, 2, 3, 1).contiguous()  # (N, 5, 5, 24)
-        l_conv9_2 = l_conv9_2.view(batch_size, -1, self.components)  # (N, 150, 4)
+        l_conv9_2 = l_conv9_2.view(batch_size, -1, (self.components + self.n_points * 2))  # (N, 150, 4)
 
         l_conv10_2 = self.loc_conv10_2(conv10_2_feats)  # (N, 16, 3, 3)
         l_conv10_2 = l_conv10_2.permute(0, 2, 3, 1).contiguous()  # (N, 3, 3, 16)
-        l_conv10_2 = l_conv10_2.view(batch_size, -1, self.components)  # (N, 36, 4)
+        l_conv10_2 = l_conv10_2.view(batch_size, -1, (self.components + self.n_points * 2))  # (N, 36, 4)
 
         l_conv11_2 = self.loc_conv11_2(conv11_2_feats)  # (N, 16, 1, 1)
         l_conv11_2 = l_conv11_2.permute(0, 2, 3, 1).contiguous()  # (N, 1, 1, 16)
-        l_conv11_2 = l_conv11_2.view(batch_size, -1, self.components)  # (N, 4, 4)
+        l_conv11_2 = l_conv11_2.view(batch_size, -1, (self.components + self.n_points * 2))  # (N, 4, 4)
 
         # Predict classes in localization boxes
         c_conv4_3 = self.cl_conv4_3(conv4_3_feats)  # (N, 4 * n_classes, 38, 38)
@@ -337,17 +338,17 @@ class SSD300(nn.Module):
         self.n_classes = n_classes
 
         self.base = VGGBase()
-        self.shape_dict = np.load('dict_val2017_v32_b64_alpha0.2.npy')
-        # self.shape_dict = np.load('dict_val2017_v32_b16.npy')
+        # self.shape_dict = np.load('dict_val2017_v32_b64_alpha0.2.npy')
+        self.shape_dict = np.load('dict_val2017_v32_b16.npy')
         self.n_components, self.n_feats = self.shape_dict.shape
         self.n_vertices = self.n_feats // 2
         self.shape_basis = torch.FloatTensor(torch.from_numpy(self.create_norm_shape_dict())).to(device)
-        # self.shape_basis.requires_grad = False
+        # self.shape_basis.requires_grad = True
         # n_components, n_vertices * 2 (64, 64)
 
         # self.disable_parameter_requires_grad(self.base)
         self.aux_convs = AuxiliaryConvolutions()
-        self.pred_convs = PredictionConvolutions(n_classes, self.n_components)
+        self.pred_convs = PredictionConvolutions(n_classes, self.n_components, self.n_vertices)
 
         # Since lower level features (conv4_3_feats) have considerably larger scales, we take the L2 norm and rescale
         # Rescale factor is initially set at 20, but is learned for each channel during back-prop
@@ -361,9 +362,9 @@ class SSD300(nn.Module):
         norm_shape = np.zeros(shape=self.shape_dict.shape, dtype=np.float32)
         for r in np.arange(self.n_components):
             contour = np.reshape(self.shape_dict[r, :], newshape=(self.n_vertices, 2))
-            contour -= np.mean(contour, axis=0, keepdims=True)
-            norm_contour = contour / np.std(contour, axis=0, keepdims=True)  # normalize shape to be in [0, 1]
-            norm_shape[r, :] = np.reshape(norm_contour, newshape=(self.n_feats, ))
+            contour -= np.min(contour, axis=0, keepdims=True)
+            norm_contour = contour / np.max(contour, axis=0, keepdims=True)  # normalize shape to be in [0, 1]
+            norm_shape[r, :] = (np.reshape(norm_contour, newshape=(self.n_feats, )) - 0.5) / self.n_components
 
         return norm_shape
 
@@ -396,7 +397,10 @@ class SSD300(nn.Module):
                                                 conv10_2_feats,
                                                 conv11_2_feats)  # (N, 8732, 4), (N, 8732, n_classes)
 
-        return self.shape2bbox(coeff), classes_scores, self.shape2points(coeff), coeff
+        init_bbox, refine_bbox = self.shape2bbox(coeff)
+        # print(init_bbox.size(), refine_bbox.size())
+        # exit()
+        return init_bbox, refine_bbox, classes_scores, self.shape2points(coeff), coeff[:, :, :self.n_components]  # last 4 col: mx,my,w,h
 
     def create_prior_boxes(self):
         """
@@ -454,32 +458,47 @@ class SSD300(nn.Module):
         return prior_boxes
 
     def shape2points(self, coefficients):
-        predicted_locs = torch.matmul(coefficients, self.shape_basis)
-        predicted_points = predicted_locs * self.priors_cxcy[:, -2:].unsqueeze(0).repeat(
-            predicted_locs.size(0), 1, self.n_vertices) / 10 \
-                           + self.priors_cxcy[:, :2].unsqueeze(0).repeat(predicted_locs.size(0), 1, self.n_vertices)
+        decoded_points = torch.matmul(coefficients[:, :, :self.n_components], self.shape_basis)  # centered as 0, 0 at image scale
+        scaled_points = decoded_points * \
+                         self.priors_cxcy[:, -2:].unsqueeze(0).repeat(coefficients.size(0), 1, self.n_vertices)
+        predicted_locs = scaled_points + \
+                         self.priors_cxcy[:, :2].unsqueeze(0).repeat(coefficients.size(0), 1, self.n_vertices) + \
+                         coefficients[:, :, self.n_components:] * \
+                         self.priors_cxcy[:, -2:].unsqueeze(0).repeat(coefficients.size(0), 1, self.n_vertices)
 
-        return predicted_points
+        return predicted_locs
 
     def shape2bbox(self, coefficients):
-        points_reshape = torch.matmul(coefficients, self.shape_basis)
+        decoded_points = torch.matmul(coefficients[:, :, :self.n_components], self.shape_basis)
+        scaled_points = decoded_points * \
+                        self.priors_cxcy[:, -2:].unsqueeze(0).repeat(coefficients.size(0), 1, self.n_vertices) + \
+                        self.priors_cxcy[:, :2].unsqueeze(0).repeat(coefficients.size(0), 1, self.n_vertices)
 
-        points_reshape = points_reshape.view(points_reshape.size(0), -1, 2, self.n_vertices)
+        scaled_points_reshape = scaled_points.view(coefficients.size(0), -1, 2, self.n_vertices)
+        pts_x_scaled = scaled_points_reshape[:, :, 0, :]
+        pts_y_scaled = scaled_points_reshape[:, :, 1, :]
+        width = pts_x_scaled.max(dim=2, keepdim=True)[0] - pts_x_scaled.min(dim=2, keepdim=True)[0]
+        height = pts_y_scaled.max(dim=2, keepdim=True)[0] - pts_y_scaled.min(dim=2, keepdim=True)[0]
+        pts_x_scaled_mean = pts_x_scaled.mean(dim=2, keepdim=True)
+        pts_y_scaled_mean = pts_y_scaled.mean(dim=2, keepdim=True)
+
+        predicted_points = coefficients[:, :, self.n_components:] * \
+                           self.priors_cxcy[:, -2:].unsqueeze(0).repeat(coefficients.size(0), 1, self.n_vertices) + \
+                           scaled_points.detach()
+
+        points_reshape = predicted_points.view(coefficients.size(0), -1, 2, self.n_vertices)
         pts_x = points_reshape[:, :, 0, :]
         pts_y = points_reshape[:, :, 1, :]
 
-        pts_x_mean = pts_x.mean(dim=2, keepdim=True) * self.priors_cxcy[:, 2].unsqueeze(-1).unsqueeze(0) / 10 \
-                     + self.priors_cxcy[:, 0].unsqueeze(-1).unsqueeze(0)
-        pts_y_mean = pts_x.mean(dim=2, keepdim=True) * self.priors_cxcy[:, 3].unsqueeze(-1).unsqueeze(0) / 10 \
-                     + self.priors_cxcy[:, 1].unsqueeze(-1).unsqueeze(0)
-        bbox_width = (pts_x.max(dim=2, keepdim=True)[0] - pts_x.min(dim=2, keepdim=True)[0]) \
-                     * self.priors_cxcy[:, 2].unsqueeze(-1).unsqueeze(0) / 10
-        bbox_height = (pts_y.max(dim=2, keepdim=True)[0] - pts_y.min(dim=2, keepdim=True)[0]) \
-                      * self.priors_cxcy[:, 3].unsqueeze(-1).unsqueeze(0) / 10
+        pts_x_min = pts_x.min(dim=2, keepdim=True)[0]
+        pts_x_max = pts_x.max(dim=2, keepdim=True)[0]
+        pts_y_min = pts_y.min(dim=2, keepdim=True)[0]
+        pts_y_max = pts_y.max(dim=2, keepdim=True)[0]
 
-        bbox = torch.cat([pts_x_mean, pts_y_mean, bbox_width, bbox_height], dim=2)
+        bbox1 = torch.cat([pts_x_scaled_mean, pts_y_scaled_mean, width, height], dim=2)
+        bbox2 = torch.cat([pts_x_min, pts_y_min, pts_x_max, pts_y_max], dim=2)
 
-        return bbox
+        return bbox1, bbox2
 
     def detect_objects(self, predicted_locs, predicted_scores, coefficients, min_score, max_overlap, top_k):
         """
@@ -516,7 +535,7 @@ class SSD300(nn.Module):
             image_scores = list()
             image_points = list()
 
-            decoded_locs = cxcy_to_xy(predicted_locs[i])  # convert reppoints to bounding boxes
+            decoded_locs = predicted_locs[i]  # convert reppoints to bounding boxes
 
             # Check for each class
             for c in range(1, self.n_classes):
@@ -611,7 +630,7 @@ class MultiBoxLoss(nn.Module):
     (2) a confidence loss for the predicted class scores.
     """
 
-    def __init__(self, priors_cxcy, shape_basis, threshold=0.5, neg_pos_ratio=3, alpha=5., beta=0.0005):
+    def __init__(self, priors_cxcy, shape_basis, threshold=0.5, neg_pos_ratio=3, alpha=5., beta=5e-4):
         super(MultiBoxLoss, self).__init__()
         self.priors_cxcy = priors_cxcy
         self.priors_xy = cxcy_to_xy(priors_cxcy)
@@ -621,6 +640,7 @@ class MultiBoxLoss(nn.Module):
         self.beta = beta
         self.shape_basis = shape_basis
         self.Diou_loss = IouLoss(pred_mode='Corner', reduce='mean', losstype='Diou')
+        self.Ciou_loss = IouLoss(pred_mode='Corner', reduce='mean', losstype='Ciou')
         self.cross_entropy = nn.CrossEntropyLoss(reduce=False)
 
     def increase_threshold(self, increment=0.1):
@@ -628,7 +648,7 @@ class MultiBoxLoss(nn.Module):
             return
         self.threshold += increment
 
-    def forward(self, predicted_locs, predicted_scores, coeffs, boxes, labels):
+    def forward(self, predicted_locs, refined_locs, predicted_scores, coeffs, boxes, labels):
         """
         Forward propagation.
 
@@ -646,6 +666,7 @@ class MultiBoxLoss(nn.Module):
         assert n_priors == predicted_locs.size(1) == predicted_scores.size(1)
 
         decoded_locs = torch.zeros((batch_size, n_priors, 4), dtype=torch.float).to(device)
+        # final_locs = torch.zeros((batch_size, n_priors, 4), dtype=torch.float).to(device)
         true_locs = torch.zeros((batch_size, n_priors, 4), dtype=torch.float).to(device)  # (N, 8732, 4)
         true_classes = torch.zeros((batch_size, n_priors), dtype=torch.long).to(device)  # (N, 8732)
 
@@ -695,8 +716,8 @@ class MultiBoxLoss(nn.Module):
         # LOCALIZATION LOSS
 
         # Localization loss is computed only over positive (non-background) priors
-        loc_loss = self.Diou_loss(decoded_locs[positive_priors], true_locs[positive_priors])  # (), scalar
-
+        loc_loss_d = self.Diou_loss(decoded_locs[positive_priors], true_locs[positive_priors])  # (), scalar
+        loc_loss_c = self.Ciou_loss(refined_locs[positive_priors], true_locs[positive_priors])
         # Note: indexing with a torch.uint8 (byte) tensor flattens the tensor when indexing
         # is across multiple dimensions (N & 8732)
         # So, if predicted_locs has the shape (N, 8732, 4),
@@ -737,4 +758,4 @@ class MultiBoxLoss(nn.Module):
 
         # TOTAL LOSS
 
-        return conf_loss + self.alpha * loc_loss + self.beta * sparsity_loss
+        return 2. * conf_loss + self.alpha * (2. * loc_loss_c + 1. * loc_loss_d) + self.beta * sparsity_loss
