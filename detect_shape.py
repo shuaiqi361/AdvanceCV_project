@@ -151,7 +151,7 @@ def detect_image(image_path, model, min_score, max_overlap, top_k, suppress=None
     _, predicted_locs, predicted_scores, predicted_points, _ = model(image.unsqueeze(0))
 
     # Detect objects in SSD output
-    det_boxes, det_labels, det_scores, det_points = model.detect_objects(predicted_locs, predicted_scores, predicted_points, min_score=min_score,
+    det_boxes, det_labels, det_scores, det_points = model.detect_objects(predicted_locs.clamp_(0, 1), predicted_scores, predicted_points.clamp_(0, 1), min_score=min_score,
                                                              max_overlap=max_overlap, top_k=top_k)
 
     # Move detections to the CPU
@@ -187,7 +187,7 @@ def detect_image(image_path, model, min_score, max_overlap, top_k, suppress=None
 
         cv2.rectangle(annotated_image, pt1=(int(box_location[0]), int(box_location[1])),
                       pt2=(int(box_location[2]), int(box_location[3])),
-                      color=hex_to_rgb(label_color_map[det_labels[i]]), thickness=1)
+                      color=hex_to_rgb(label_color_map[det_labels[i]]), thickness=2)
 
         # Text
         text = det_labels[i].upper()
@@ -196,13 +196,13 @@ def detect_image(image_path, model, min_score, max_overlap, top_k, suppress=None
                          box_location[1] + 1 + label_size[0][1]]
         cv2.rectangle(annotated_image, pt1=(int(text_location[0]), int(text_location[1])),
                       pt2=(int(text_location[2]), int(text_location[3])),
-                      color=hex_to_rgb(label_color_map[det_labels[i]]), thickness=-1)
+                      color=(50, 100, 50), thickness=-1)
         cv2.putText(annotated_image, text, org=(int(text_location[0]), int(text_location[3])),
                     fontFace=cv2.FONT_HERSHEY_COMPLEX, thickness=1, fontScale=0.4, color=(255, 255, 255))
 
         for j in range(len(point_location) // 2):
 
-            cv2.circle(annotated_image, center=(int(point_location[2 * j]), int(point_location[2 * j + 1])), radius=5,
+            cv2.circle(annotated_image, center=(int(point_location[2 * j]), int(point_location[2 * j + 1])), radius=3,
                        color=hex_to_rgb(label_color_map[det_labels[i]]), thickness=-1)
 
     # del predicted_locs, predicted_scores, image, det_boxes, det_labels, det_scores, original_image
@@ -230,7 +230,8 @@ if __name__ == '__main__':
 
     if sys.argv[1] == '--image':
         img_root = 'data/VOC/Eval_images/shape'
-        model_path = 'checkpoints/my_checkpoint_anchor_shape_basis64.pth.tar'
+        # model_path = 'checkpoints/my_checkpoint_anchor_shape_basis64.pth.tar'
+        model_path = 'checkpoints/my_checkpoint_refine_shape_basis64.pth.tar'
         output_folder = 'code'
         checkpoint = torch.load(model_path)
         start_epoch = checkpoint['epoch'] + 1
@@ -242,7 +243,7 @@ if __name__ == '__main__':
         for image_name in os.listdir(img_root):
             if os.path.isdir(os.path.join(img_root, image_name)):
                 continue
-            annotated_image = detect_image(os.path.join(img_root, image_name), model, min_score=0.2, max_overlap=0.35, top_k=100)
+            annotated_image = detect_image(os.path.join(img_root, image_name), model, min_score=0.25, max_overlap=0.3, top_k=100)
             cv2.imwrite(os.path.join(os.path.join(img_root, output_folder), image_name), annotated_image)
     else:
         raise NotImplementedError
